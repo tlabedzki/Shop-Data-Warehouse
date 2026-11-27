@@ -380,6 +380,23 @@ erDiagram
 ```
 <!-- /generated:erd -->
 
+## Why these tools
+
+Each tool was picked for how this project reads its data: every daily file is read once, in full, when it is loaded,
+and the warehouse is read by aggregating queries from dbt, the app and the charts. A fresh clone has to rebuild
+everything with one command, with no server, account, key or paid service.
+
+| Tool | What it does here and why it fits | Alternative considered |
+|---|---|---|
+| Data Generator | Generates the fictional shop with injected quality issues and a table listing every one of them, which is the answer key the grading needs; the same seed without issues gives the clean shop as a control. | The public Olist Brazilian E-Commerce data has real errors, but its license is non-commercial, it has no answer key and it is a different shop from the rest of the portfolio. |
+| Daily CSV files | Untyped text, the way shop systems export data, so format and type errors survive until staging and the tests have to catch them. | Daily Parquet files are typed and several times smaller, but some errors (a malformed date, text in a numeric column) would disappear while writing them. |
+| DuckDB | The warehouse in one file: column storage makes aggregations fast, it reads CSV directly and it runs with dbt on Windows and in CI without a server. | PostgreSQL stores rows (slower to aggregate) and needs Docker or an installed service; BigQuery and Snowflake need an account, keys and payment. |
+| dbt Core | Keeps the cleaning rules, the star schema and the reporting tables as SQL models with data tests, contracts and unit tests, and its manifest draws the ERD and the lineage. | dbt v2 had no mature DuckDB adapter when the project was built; dbt snapshots for product history depend on when they run and would not rebuild the same history day by day, so a model does it; generic tests are written in the project instead of packages from dbt Hub, so the tests need no network. |
+| Airflow | The daily DAG with backfill, a thin layer over the same command line steps that `main.py` runs; it runs in CI on Linux in its own environment, because its dependencies conflict with dbt Core. | Running Airflow locally with docker-compose was left out: Airflow does not run on Windows and that setup could not be tested on the machine the project was built on. |
+| pandas and pyarrow | Turn the generated tables into daily files and grade the warehouse against the answer key; pyarrow lets the generator save its tables as Parquet, and both use the same versions as Data Generator, so its unchanged code runs in this project's environment. | – |
+| Dash and Mantine | The app, built from the same blocks as every app in this portfolio, with numbers from the same functions as the README. | Streamlit and Gradio were ruled out for all apps in the portfolio: they sit side by side on the GitHub profile and a different look stands out. |
+| pytest | Tests the daily files, loading, grading, the app and a small shop built through dbt, locally and in CI. | – |
+
 ## Project structure
 
 <details><summary>Show the tree</summary>

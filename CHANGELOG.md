@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-11-27
+
+### Added
+
+- README section "Why these tools": what each key tool does in the project, why it fits how the data is read and
+  rebuilt from a fresh clone, and which alternative was considered and why it was dropped.
+
+### Fixed
+
+- Package version in `pyproject.toml` now follows the releases (it still said 0.1.0).
+
 ## [1.0.0] - 2026-11-27
 
 ### Added
