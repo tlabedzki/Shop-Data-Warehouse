@@ -35,7 +35,7 @@ def landing_is_current(variant: str) -> bool:
 
 def prepare(variants: list[str], overrides: dict | None = None) -> None:
     """Generate the shop (if needed) and write its daily files (if they are not from this generation)."""
-    source.generate_all(overrides)
+    source.generate_all(overrides, variants=variants)
     for variant in variants:
         if landing_is_current(variant):
             continue
@@ -91,10 +91,16 @@ def dbt_build(variant: str, run_date: str | None = None, path: Path | None = Non
     return dict(sorted(statuses.items()))
 
 
+def remove_warehouse(target: Path) -> None:
+    """Delete a warehouse file and the write-ahead log an interrupted run may have left next to it."""
+    target.unlink(missing_ok=True)
+    target.with_name(target.name + ".wal").unlink(missing_ok=True)
+
+
 def build_full(variant: str, days: list[str] | None = None, path: Path | None = None) -> dict:
     """A warehouse from scratch: every landed day loaded at once, then one full dbt build."""
     target = path or warehouse_path(variant)
-    target.unlink(missing_ok=True)
+    remove_warehouse(target)
     load_all(variant, days, target)
     return dbt_build(variant, path=target, full_refresh=True)
 
@@ -102,7 +108,7 @@ def build_full(variant: str, days: list[str] | None = None, path: Path | None = 
 def build_daily(variant: str, days: list[str], path: Path | None = None) -> dict:
     """A warehouse built the way the DAG builds it: load a day, run dbt for that day, next day."""
     target = path or warehouse_path(variant)
-    target.unlink(missing_ok=True)
+    remove_warehouse(target)
     statuses = {}
     for day in days:
         load_day(variant, day, target)

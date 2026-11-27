@@ -259,15 +259,15 @@ RECONCILE_LABELS = {
         "order_status": "Order status from the event log = status in the generator",
         "payment_status": "Payment status = status in the generator",
         "is_late": "Late delivery = generator's flag",
-        "price_on_order_day": "List price of the product version on the order day = price on the line",
-        "customers": "Customers after merging second accounts = people in the generator",
+        "price_on_order_day": "List price of the line's product version = generator's price that day",
+        "customers": "Account mapped to its person (second accounts from the answer key)",
     },
     "pl": {
         "order_status": "Status zamówienia z dziennika zdarzeń = status w generatorze",
         "payment_status": "Status płatności = status w generatorze",
         "is_late": "Spóźniona dostawa = znacznik generatora",
-        "price_on_order_day": "Cena wersji produktu w dniu zamówienia = cena na linii",
-        "customers": "Klienci po scaleniu drugich kont = osoby w generatorze",
+        "price_on_order_day": "Cena wersji produktu z linii = cena w historii generatora tego dnia",
+        "customers": "Konto przypisane do właściwej osoby (drugie konta według klucza)",
     },
 }
 

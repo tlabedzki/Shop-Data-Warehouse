@@ -85,11 +85,13 @@ zostanie uruchomiony drugi raz?
 **Co robi hurtownia.** Plik dnia niesie tylko to, co system wiedział tego dnia: zamówienie przychodzi bez statusu,
 a status dochodzi później jako zdarzenia (opłacone, wysłane, dostarczone, zwrócone). Ładowanie sprawdza każdy plik
 z manifestem (liczba wierszy i SHA-256, czyli odcisk treści, który zmienia się przy każdej zmianie pliku) oraz
-nagłówek kolumn. Potem usuwa dzień i wstawia go od nowa w jednej transakcji, więc ponowne ładowanie daje te same
-tabele (ładowanie idempotentne). Wszystko trafia do schematu `raw` jako tekst, z datą wyciągu i nazwą pliku.
+nagłówek kolumn. Potem usuwa dzień i wstawia go od nowa w jednej transakcji (zapis wchodzi cały albo wcale), więc
+ponowne ładowanie daje te same tabele (ładowanie idempotentne). Wszystko trafia do schematu `raw` jako tekst,
+z datą wyciągu i nazwą pliku.
 
 **Jak to sprawdzamy.** Test dbt porównuje dziennik ładowań z liczbą wierszy w `raw`. Testy pytest psują plik
-(dopisany wiersz, zmieniona kolumna, brak manifestu) i sprawdzają, że ładowanie staje bez zmian w hurtowni.
+(dopisany wiersz, zmieniona kolumna, brak manifestu) i sprawdzają, że ładowanie staje i niczego w hurtowni
+nie zmienia.
 
 **Wynik.**
 
@@ -105,7 +107,7 @@ przyszło 29 lis 2024, w tygodniu Black Friday.
 
 ## 4. Czyszczenie: ile błędów łapią reguły i testy?
 
-**Pytanie.** Ile błędów jest w danych klientów, produktów i zamówień, które da się naprawić i co zostaje nieznane?
+**Pytanie.** Ile błędów jest w danych klientów, produktów i zamówień? Które da się naprawić, a co zostaje nieznane?
 
 **Co robi hurtownia.** Warstwa staging w dbt (pierwsza warstwa modeli: typy, czyszczenie, każdy rekord raz)
 stosuje reguły zapisane w SQL. Telefon w dowolnym zapisie staje się `+48` i dziewięcioma cyframi, miasto pochodzi
@@ -114,7 +116,7 @@ Cena zakupu ponad pięć razy wyższa od ceny netto to cena wpisana w groszach. 
 odtwarza z kwoty płatności (kwota = linie po rabacie + dostawa). Każde wykrycie trafia do dziennika
 `quality.dq_issues`, a każda reguła ma test dbt z poziomem ostrzeżenia, więc `dbt build` pokazuje, ile znalazła.
 
-**Jak to sprawdzamy.** `score.py` łączy dziennik z kluczem po tabeli, kluczu wiersza i kolumnie i ocenia każdy błąd
+**Jak to sprawdzamy.** `score.py` łączy dziennik z kluczem po tabeli, kluczu wiersza oraz kolumnie i ocenia każdy błąd
 (rozdział 2). Wartości porównuje w jednym zapisie (np. `720 731 397` i `+48720731397` to ten sam numer).
 
 **Wynik.**
@@ -152,8 +154,8 @@ wstecz daje tę samą historię. Modele core mają kontrakty: dbt sprawdza nazwy
 | Status zamówienia z dziennika zdarzeń = status w generatorze | 55 568 | 55 568 |
 | Status płatności = status w generatorze | 55 568 | 55 568 |
 | Spóźniona dostawa = znacznik generatora | 52 452 | 52 452 |
-| Cena wersji produktu w dniu zamówienia = cena na linii | 80 326 | 80 326 |
-| Klienci po scaleniu drugich kont = osoby w generatorze | 40 000 | 40 000 |
+| Cena wersji produktu z linii = cena w historii generatora tego dnia | 80 326 | 80 326 |
+| Konto przypisane do właściwej osoby (drugie konta według klucza) | 41 200 | 41 200 |
 <!-- /generated:core -->
 
 **Co to znaczy dla sklepu.** Raport o zamówieniach, cenach i klientach liczony z hurtowni zgadza się z tym, co
@@ -179,8 +181,8 @@ kontra 8,9 mln zł (−30%). Klientów 40 000, a kont w plikach 41 200.
 ![Raport z surowych plików zawyża przychód netto o 70%](docs/img/raw-vs-warehouse.png)
 <!-- /generated:gap -->
 
-**Co to znaczy dla sklepu.** Zdublowane linie i ilości wpisane z zerem za dużo wystarczą, żeby raport z plików
-pokazał sprzedaż, której nie było, i marżę, która w niektórych miesiącach spada poniżej zera.
+**Co to znaczy dla sklepu.** Zdublowane linie, niemożliwe ilości i ceny zakupu w groszach wystarczą, żeby raport
+z plików pokazał nieistniejącą sprzedaż oraz marżę, która w niektórych miesiącach spada poniżej zera.
 
 ## 7. Airflow: czy dzień po dniu wychodzi to samo?
 
@@ -193,8 +195,8 @@ zamówienia, które tego dnia dostały linię, zdarzenie, płatność, wysyłkę
 wersji pakietów, więc Airflow ma własne środowisko i wywołuje kroki projektu przez jego linię poleceń.
 
 **Jak to sprawdzamy.** `main.py --daily` buduje pierwsze dni dzień po dniu i porównuje skróty wszystkich tabel
-z pełnym ładowaniem. W CI prawdziwy Airflow 3.4 uruchamia DAG dla pięciu dni małego sklepu, powtarza jeden z nich
-i porównuje wynik z pełnym ładowaniem.
+z pełnym ładowaniem. W CI (automatycznych testach na GitHubie po każdym pushu) prawdziwy Airflow 3.4 uruchamia DAG
+dla pięciu dni małego sklepu, powtarza jeden z nich i porównuje wynik z pełnym ładowaniem.
 
 **Wynik.**
 
@@ -222,13 +224,13 @@ sklepie z błędami: 0. Pełna lista rodzajów błędów: [docs/quality-issues.
 <!-- /generated:verdicts -->
 
 **Gdzie reguły się pomyliły i czego to uczy.** W końcowym wyniku nie ma pomyłek, ale po drodze klucz odpowiedzi
-złapał cztery:
+złapał trzy. Czwarty punkt to granica tego, co da się odtworzyć:
 
 - Reguła „cena zakupu nie wyższa od ceny netto” na pierwszych dniach oznaczała prawdziwe ceny jako błąd, bo część
-  produktów startowała z ceną katalogową poniżej kosztu. Lekcja: próg z danych (w czystym sklepie stosunek ceny
-  zakupu do ceny netto nie przekracza dwóch, a w groszach wynosi co najmniej kilkadziesiąt), a nie z założenia.
+  produktów startowała z ceną katalogową poniżej kosztu. Lekcja: próg z danych, a nie z założenia (w czystym
+  sklepie cena zakupu nie przekracza dwóch cen netto, a cena wpisana w groszach jest wielokrotnie wyższa).
 - Test relacji „sesja → zamówienie” był czerwony w trybie dziennym: sesja sprzed północy kończy się zamówieniem
-  zapisanym w pliku następnego dnia. Lekcja: dane przychodzą spóźnione i test musi to znać.
+  zapisanym w pliku następnego dnia. Lekcja: dane przychodzą z opóźnieniem i test musi to uwzględniać.
 - Generator przy kopii konta bez e-maila zapisał tekst `None`. Reguła formatu najpierw zostawiła go jako adres
   `none`. Lekcja: adres bez `@` to brak adresu.
 - Części ilości nie da się odtworzyć: zamówienie bez wysyłki nie ma znanej opłaty za dostawę. Lekcja: hurtownia
@@ -251,7 +253,9 @@ Dlatego „trafione” w tabeli coś znaczy.
 - Dane są syntetyczne: błędy mają znane rodzaje i proporcje. W prawdziwym sklepie pojawią się inne, a próg ceny
   zakupu trzeba by wyznaczyć z jego danych.
 - Jedno ziarno losowania i jeden poziom błędów („medium”).
-- Bez klucza odpowiedzi kontrolą zostaje dziennik wykryć, testy dbt i uzgodnienia sum między warstwami.
+- Bez klucza odpowiedzi kontrolą zostają dziennik wykryć, testy dbt i uzgodnienia sum między warstwami.
+- Przyrostowe są tylko tabele faktów; warstwy pośrednie, wymiary i tabele raportowe dbt liczy co dzień od nowa.
+  Przy tej skali to sekundy, ale przy latach historii przyrostowe musiałyby być też warstwy pośrednie.
 - Airflow działa tylko w CI na Linuksie; na Windowsie te same kroki uruchamia `main.py`.
 
 ## Szybki start
@@ -286,7 +290,7 @@ python main.py --daily
 ```
 
 Pierwsze uruchomienie pobiera Data Generator z GitHuba, generuje oba sklepy, zapisuje pliki dzienne, buduje dwie
-hurtownie i wpisuje wynik do `output/results.json` (ok. 7 minut; kolejne bez generowania ok. 2 minut).
+hurtownie i wpisuje wynik do `output/results.json` (ok. 4 minut; kolejne bez generowania ok. 2 minut).
 
 ### Aplikacja
 
@@ -402,7 +406,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-32 testy pytest (ok. 50 s) sprawdzają pliki dzienne, ładowanie i jego odporność na zepsute pliki, ocenę względem
+26 testów pytest (ok. 45 s) sprawdza pliki dzienne, ładowanie i jego odporność na zepsute pliki, ocenę względem
 klucza, aplikację oraz zbudowanie małego sklepu przez dbt w pełnym i dziennym trybie. Do tego 105 testów danych
 dbt i 5 testów jednostkowych reguł czyszczenia w każdym `dbt build`, a w CI test DAG-a w prawdziwym Airflow.
 

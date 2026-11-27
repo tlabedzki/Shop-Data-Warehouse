@@ -6,7 +6,8 @@
 ) }}
 
 -- depends_on: {{ ref('stg_order_lines') }}, {{ ref('stg_order_events') }}, {{ ref('stg_payments') }}
--- depends_on: {{ ref('stg_shipments') }}, {{ ref('stg_returns') }}
+-- depends_on: {{ ref('stg_shipments') }}, {{ ref('stg_returns') }}, {{ ref('stg_customers') }}
+-- depends_on: {{ ref('int_customer_accounts') }}
 
 -- One row per order: status assembled from the event log, payment and its fee, shipment and lateness.
 with lines as (

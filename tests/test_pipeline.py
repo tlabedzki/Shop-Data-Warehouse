@@ -1,8 +1,25 @@
 """dbt on the tiny shop: a full build and a day-by-day build end in the same tables, and every dbt test passes."""
 import duckdb
+import pandas as pd
 import pytest
 
 from shop_warehouse import landing, pipeline
+
+
+@pytest.fixture
+def generated():
+    """The tiny shop plus an account that lands late: 100000 shares 100002's bank account and opens on day 5,
+    after 100002's order on day 2, so a daily run has to move that order to the older account."""
+    from conftest import tiny_generated
+
+    tables = tiny_generated()
+    customers = tables["customer_data"]
+    late = customers[customers["customer_id"] == 100002].copy()
+    late["customer_id"] = 100000
+    late["email"] = "olek.wilk7@example.org"
+    late["signup_date"] = pd.Timestamp("2023-01-05")
+    tables["customer_data"] = pd.concat([customers, late], ignore_index=True)
+    return tables
 
 
 @pytest.fixture
@@ -14,7 +31,8 @@ def tiny(tmp_path, monkeypatch, landed):
 def test_daily_build_equals_full_build(tiny):
     days = sorted(path.name for path in (tiny / "landing" / "dirty").iterdir())
     full = pipeline.build_full("dirty", days, tiny / "full.duckdb")
-    assert not any(key.endswith((":error", ":fail", ":warn")) for key in full)
+    assert not any(key.endswith((":error", ":fail")) for key in full)
+    assert full["test:warn"] == 1  # the duplicate account rule found the late account
     pipeline.build_daily("dirty", days, tiny / "daily.duckdb")
     assert pipeline.fingerprint(tiny / "full.duckdb") == pipeline.fingerprint(tiny / "daily.duckdb")
 
@@ -28,7 +46,11 @@ def test_daily_build_equals_full_build(tiny):
     assert versions[1000001] == "200001-20230101" and versions[1000003] == "200001-20230103"
     kept = dict(con.execute("select order_line_id, kept_quantity from core.fct_order_lines").fetchall())
     assert kept == {1000001: 1, 1000002: 0, 1000003: 0}
-    assert con.execute("select count(*) from quality.dq_issues").fetchall()[0][0] == 0
+    # The late account is the older one, so the person is 100000 in both builds (the fingerprints are equal).
+    customers = dict(con.execute("select order_id, customer_id from core.fct_orders").fetchall())
+    assert customers[100002] == 100000
+    issues = con.execute("select table_name, record_key, rule from quality.dq_issues").fetchall()
+    assert issues == [("customers", "100002", "duplicate_customer")]
     con.close()
 
 

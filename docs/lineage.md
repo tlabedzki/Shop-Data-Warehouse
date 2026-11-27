@@ -87,6 +87,9 @@ flowchart LR
     source_shipments --> staging_stg_shipments
     staging_stg_campaigns --> core_dim_campaign
     staging_stg_customers --> core_dim_customer
+    staging_stg_customers --> core_fct_order_lines
+    staging_stg_customers --> core_fct_orders
+    staging_stg_customers --> core_fct_sessions
     staging_stg_customers --> intermediate_int_customer_accounts
     staging_stg_customers --> quality_dq_issues
     staging_stg_order_events --> core_fct_order_lines

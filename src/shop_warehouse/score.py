@@ -112,13 +112,26 @@ def reconcile(con: duckdb.DuckDBPyConnection, generated: Path) -> dict:
     checks["is_late"] = con.execute(f"""
         select count(*), count(*) filter (where o.is_late = t.is_late)
         from core.fct_orders o join '{g}/shipment_data.parquet' t using (order_id)""").fetchall()[0]
-    checks["price_on_order_day"] = con.execute("""
-        select count(*), count(*) filter (where l.unit_price_gross = p.sales_price_gross)
-        from core.fct_order_lines l join core.dim_product p using (product_version_id)""").fetchall()[0]
+    # The list price of the product version the warehouse picked for the line, against the generator's price
+    # history on the order day.
+    checks["price_on_order_day"] = con.execute(f"""
+        select count(*), count(*) filter (where p.sales_price_gross = h.sales_price_gross)
+        from core.fct_order_lines l
+        join core.dim_product p using (product_version_id)
+        join '{g}/price_history.parquet' h
+          on h.product_id = l.product_id and l.order_date >= cast(h.valid_from as date)
+         and l.order_date <= coalesce(cast(h.valid_to as date), date '9999-12-31')""").fetchall()[0]
+    # Every account of the generator mapped to the right person: a second account to the original it copies
+    # (from the answer key), any other account to itself.
     checks["customers"] = con.execute(f"""
-        select (select count(*) from '{g}/customer_data.parquet' where customer_id not in (
-                    select cast(record_key as bigint) from quality.dq_issues where rule = 'duplicate_customer')),
-               (select count(*) from core.dim_customer)""").fetchall()[0]
+        with truth as (
+            select c.customer_id as account_id,
+                   coalesce(cast(q.clean_value as bigint), c.customer_id) as person_id
+            from '{g}/customer_data.parquet' c
+            left join '{g}/quality_issue_data.parquet' q
+              on q.issue_type = 'duplicate_customer' and cast(q.key_value as bigint) = c.customer_id)
+        select count(*), count(*) filter (where a.customer_id = t.person_id)
+        from truth t left join intermediate.int_customer_accounts a using (account_id)""").fetchall()[0]
     return {name: {"checked": int(total), "agree": int(agree)} for name, (total, agree) in checks.items()}
 
 

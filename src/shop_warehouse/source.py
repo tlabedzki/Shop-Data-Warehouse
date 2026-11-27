@@ -82,18 +82,20 @@ def generate(generator_dir: Path, variant: str, overrides: dict | None = None, s
     return target
 
 
-def is_generated(variant: str, overrides: dict | None = None) -> bool:
+def is_generated(variant: str, overrides: dict | None = None, source: str = DATA_GENERATOR_URL,
+                 tag: str = DATA_GENERATOR_TAG) -> bool:
     info_path = generated_dir(variant) / "source.json"
     if not info_path.exists():
         return False
     info = json.loads(info_path.read_text(encoding="utf-8"))
     wanted = {"random_state": SEED, "data_language": "en", **(overrides or {})}
-    return info.get("tag") == DATA_GENERATOR_TAG and info.get("settings") == wanted
+    return info.get("repository") == source and info.get("tag") == tag and info.get("settings") == wanted
 
 
 def generate_all(overrides: dict | None = None, source: str = DATA_GENERATOR_URL, tag: str = DATA_GENERATOR_TAG,
-                 force: bool = False) -> None:
-    pending = [variant for variant in VARIANTS if force or not is_generated(variant, overrides)]
+                 force: bool = False, variants: list[str] | None = None) -> None:
+    pending = [variant for variant in (variants or VARIANTS)
+               if force or not is_generated(variant, overrides, source, tag)]
     if not pending:
         return
     generator_dir = clone(source, tag)

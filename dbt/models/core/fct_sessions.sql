@@ -5,7 +5,10 @@
     on_schema_change='fail'
 ) }}
 
--- One row per web session; a daily run appends the sessions of its extract date.
+-- depends_on: {{ ref('stg_customers') }}
+
+-- One row per web session; a daily run adds the sessions of its extract date and rebuilds the sessions of a
+-- person who got another account that day.
 select
     s.session_id,
     s.session_start,
@@ -23,5 +26,5 @@ select
 from {{ ref('stg_sessions') }} as s
 left join {{ ref('int_customer_accounts') }} as a on a.account_id = s.customer_id
 {% if is_daily_run() %}
-where s._extract_date = date '{{ var("run_date") }}'
+where s._extract_date = date '{{ var("run_date") }}' or s.customer_id in ({{ touched_accounts() }})
 {% endif %}

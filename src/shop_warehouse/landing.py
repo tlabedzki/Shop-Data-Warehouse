@@ -151,7 +151,9 @@ def source_tables(generated: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.Data
     }
     for name, table in tables.items():
         table = table.copy()
-        table["day"] = day_of(table["day"])
+        table["day"] = day_of(table["day"]).clip(lower=first_day)
+        if table["day"].isna().any():
+            raise ValueError(f"{name}: {int(table['day'].isna().sum())} rows have no day to land on")
         tables[name] = table
     return tables, first_day
 
@@ -203,6 +205,9 @@ def land(variant: str) -> LandingSummary:
         frames = {name: grouped[name].get(day, empty[name]) for name in TABLES}
         write_day(target / day.strftime("%Y-%m-%d"), day.strftime("%Y-%m-%d"), frames)
     rows = {name: int(len(table)) for name, table in tables.items()}
+    written = {name: sum(len(frame) for frame in grouped[name].values()) for name in TABLES}
+    if written != rows:
+        raise ValueError(f"Rows written {written} differ from the source tables {rows}")
     return LandingSummary(variant, first_day.strftime("%Y-%m-%d"), last_day.strftime("%Y-%m-%d"),
                           int((last_day - first_day).days) + 1, rows)
 
