@@ -433,7 +433,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-26 testów pytest (około 45 s) sprawdza pliki dzienne, ładowanie i jego reakcję na uszkodzone pliki, ocenę względem klucza,
+31 testów pytest (około 45 s) sprawdza pliki dzienne, ładowanie i jego reakcję na uszkodzone pliki, ocenę względem klucza,
 aplikację oraz budowę małego sklepu przez dbt w trybie pełnym i dziennym. Do tego każdy `dbt build` uruchamia 105
 testów danych dbt i 5 testów jednostkowych reguł czyszczenia, a CI testuje DAG w prawdziwym Airflow.
 

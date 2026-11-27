@@ -428,7 +428,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-26 pytest tests (about 45 s) check the daily files, loading and how it handles broken files, grading against the key,
+31 pytest tests (about 45 s) check the daily files, loading and how it handles broken files, grading against the key,
 the app, and building a small shop through dbt in full and daily mode. On top of that, every `dbt build` runs 105 dbt
 data tests and 5 unit tests of the cleaning rules, and CI tests the DAG in a real Airflow.
 
