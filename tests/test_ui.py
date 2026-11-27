@@ -111,7 +111,7 @@ def test_metric_switch_shows_the_gap(ui_app):
 def test_polish_words_and_numbers(results):
     frame = report.quality_frame(results, language="pl")
     assert "Telefon zapisany inaczej" in frame["problem"].tolist()
-    assert report.quality_title(frame, "pl")[0] == "Hurtownia znajduje każdy z 9 wstrzykniętych błędów i naprawia 6"
+    assert report.quality_title(frame, "pl")[0] == "Hurtownia znajduje każdy z 9 błędów i naprawia 6"
     assert report.compact(35_728_153.84, "pl") == "35,7 mln" and report.compact(35_728_153.84) == "35.7M"
     assert report.integer(13451, "pl") == "13 451" and report.percent(0.7, "pl", signed=True) == "+70%"
 
