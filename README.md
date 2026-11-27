@@ -1,5 +1,7 @@
 # Shop Data Warehouse
 
+**English** | [Polski](READMEPL.md)
+
 [![Tests](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml/badge.svg)](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
