@@ -1,11 +1,10 @@
 # Shop Data Warehouse
 
-**English** | [Polski](READMEPL.md)
-
 [![Tests](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml/badge.svg)](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![Release](https://img.shields.io/github/v/release/tlabedzki/Shop-Data-Warehouse)](https://github.com/tlabedzki/Shop-Data-Warehouse/releases)
+[![Polski](docs/img/flag-pl.svg "Polski")](READMEPL.md)
 
 A case study of an online shop's data warehouse: daily CSV files through DuckDB, dbt and Airflow to a star schema
 whose data tests are checked against an answer key.

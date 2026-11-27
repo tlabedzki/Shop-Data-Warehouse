@@ -1,11 +1,10 @@
 # Shop Data Warehouse
 
-[English](README.md) | **Polski**
-
 [![Tests](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml/badge.svg)](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![Release](https://img.shields.io/github/v/release/tlabedzki/Shop-Data-Warehouse)](https://github.com/tlabedzki/Shop-Data-Warehouse/releases)
+[![English](docs/img/flag-gb.svg "English")](README.md)
 
 Studium przypadku: hurtownia danych sklepu internetowego. Codzienne pliki CSV przechodzą przez DuckDB, dbt i Airflow
 do schematu gwiazdy (star schema: tabele faktów w środku, tabele opisów wokół nich). Wyniki testów danych
