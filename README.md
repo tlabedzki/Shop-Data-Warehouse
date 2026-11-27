@@ -3,316 +3,320 @@
 [![Tests](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml/badge.svg)](https://github.com/tlabedzki/Shop-Data-Warehouse/actions/workflows/tests.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![Release](https://img.shields.io/github/v/release/tlabedzki/Shop-Data-Warehouse)](https://github.com/tlabedzki/Shop-Data-Warehouse/releases)
 
-Studium przypadku hurtowni danych sklepu internetowego: od dziennych plików CSV przez DuckDB, dbt i Airflow do
-schematu gwiazdy z testami danych sprawdzonymi kluczem odpowiedzi.
+A case study of an online shop's data warehouse: daily CSV files through DuckDB, dbt and Airflow to a star schema
+whose data tests are checked against an answer key.
 
-**Problem.** Systemy sklepu codziennie zrzucają pliki z klientami, produktami, zamówieniami i ruchem na stronie.
-W plikach są braki, literówki, zdublowane wiersze i liczby wpisane w złych jednostkach. Raport policzony wprost
-z plików wygląda wiarygodnie, a nikt nie wie, ile w nim błędów ani czy czyszczenie czegoś nie psuje.
+**Problem.** The shop's systems drop files every day with customers, products, orders and website traffic. The files
+have gaps, typos, duplicated rows and numbers typed in the wrong units. A report counted straight from the files
+looks believable, and nobody knows how many errors it carries or whether cleaning breaks something.
 
-**Podejście.** Hurtownia ładuje każdy dzień raz i w całości, dbt czyści dane i składa z nich schemat gwiazdy
-z testami. Generator danych zna każdy błąd, który wstrzyknął, więc kod sprawdza, ile hurtownia złapała, naprawiła
-i przeoczyła.
+**Approach.** The warehouse loads each day once and in full, and dbt cleans the data and builds a star schema with
+tests. The data generator knows every issue it injected, so code checks how many the warehouse caught, fixed and
+missed.
 
 <!-- generated:result -->
-**Wynik.** Z 13 451 wstrzykniętych błędów hurtownia znajduje wszystkie: 8 958 naprawia do prawdziwej wartości, a 4 493
-zostawia jako nieznane, bo prawdy nie ma w danych. Nie podnosi ani jednego fałszywego alarmu. Raport liczony wprost
-z plików zawyżyłby przychód netto o 70%.
+**Result.** Of 13,451 injected issues the warehouse finds every one: it fixes 8,958 to the true value, keeps 4,493
+unknown because the truth is not in the data, and raises no false alarm. A report counted straight from the files would
+overstate net revenue by 70%.
 <!-- /generated:result -->
 
 <!-- generated:hero -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/app-demo-dark.svg">
-  <img alt="Aplikacja Shop Data Warehouse w ilustracji: wykres 13 451 wstrzykniętych błędów zawęża się do linii zamówień, strona zjeżdża do porównania z surowymi plikami, które zawyżają przychód netto o 70%, a przełącznik pokazuje marżę brutto zaniżoną o 30%." src="docs/img/app-demo.svg">
+  <img alt="Shop Data Warehouse app, illustrated: the chart of 13,451 injected issues narrows to order lines, the page scrolls to the raw files, which overstate net revenue by 70%, and a switch shows gross margin understated by 30%." src="docs/img/app-demo.svg">
 </picture>
 <!-- /generated:hero -->
 
 **Stack:** Python · DuckDB · dbt · Airflow · pandas · Dash · Plotly · pytest
 
 <!-- generated:summary -->
-- **Trafione:** status 55 568 zamówień złożony z 219 278 zdarzeń, cena wersji produktu w dniu zamówienia i scalenie
-  1 200 drugich kont zgadzają się z generatorem w 100%.
-- **Chybione:** 17 z 241 niemożliwych ilości i 576 z 1 205 braków operatora płatności zostają nieznane, bo w danych nie
-  ma skąd ich odtworzyć.
+- **What worked:** the status of 55,568 orders built from 219,278 events, the product version's price on the order day
+  and the merge of 1,200 second accounts agree with the generator 100%.
+- **What missed:** 17 of 241 impossible quantities and 576 of 1,205 missing payment providers stay unknown: nothing in
+  the data tells the true value.
 <!-- /generated:summary -->
 
-## 1. Sklep, jego pliki i pytania
+## 1. The shop, its files and its questions
 
-Lumo to fikcyjny polski sklep internetowy z [Data Generatora](https://github.com/tlabedzki/Data-Generator):
-40 tysięcy klientów, 50 tysięcy produktów i zamówienia z lat 2023–2024. Jego systemy codziennie zostawiają folder
-z dziesięcioma plikami CSV (zwykłymi tabelami tekstowymi) i manifestem, czyli spisem plików z liczbą wierszy
-i odciskiem treści. Hurtownia (jedna baza, w której te pliki stają się uporządkowanymi tabelami do raportów) ma
-odpowiedzieć na pytania właściciela tak, żeby każdą odpowiedź dało się sprawdzić:
+Lumo is a fictional Polish online shop from [Data Generator](https://github.com/tlabedzki/Data-Generator):
+40,000 customers, 50,000 products and orders from 2023–2024. Every day its systems leave a folder with ten CSV files
+(plain text tables) and a manifest, a list of the files with their row counts and a fingerprint of their content.
+The warehouse (one database where these files become tidy tables for reports) has to answer the owner's questions in
+a way that every answer can be checked:
 
-| Pytanie | Jak odpowiada hurtownia | Gdzie leży prawdziwa odpowiedź |
+| Question | How the warehouse answers | Answer to check against |
 |---|---|---|
-| Czy każdy dzień wszedł raz i w całości? | Kontrola manifestu i ładowanie dnia w jednej transakcji (rozdział 3) | Manifest dnia |
-| Ile błędów jest w danych i które da się naprawić? | Reguły czyszczenia w dbt i dziennik `quality.dq_issues` (rozdział 4) | `quality_issue_data` z generatora |
-| Jaki status ma zamówienie? | Ostatnie zdarzenie z dziennika zamówienia (rozdział 5) | `order_status` w generatorze |
-| Ile kosztował produkt w dniu zamówienia? | Historia wersji produktu (rozdział 5) | `price_history` w generatorze |
-| Ilu klientów ma sklep? | Scalanie drugich kont tej samej osoby (rozdział 4) | Klienci w generatorze |
-| Ile sklep naprawdę zarobił? | Tabele raportowe dbt (rozdział 6) | Ten sam sklep bez błędów |
-| Czy codzienne uruchomienia dają to samo co pełne ładowanie? | Airflow dzień po dniu kontra jedno ładowanie (rozdział 7) | Pełne ładowanie tych samych dni |
+| Did every day load once and in full? | Manifest check and loading a day in one transaction (chapter 3) | The day's manifest |
+| How many errors are in the data, and which can be fixed? | Cleaning rules in dbt and the log `quality.dq_issues` (chapter 4) | `quality_issue_data` from the generator |
+| What is an order's status? | The latest event in the order's log (chapter 5) | `order_status` in the generator |
+| What did a product cost on the order day? | The product's version history (chapter 5) | `price_history` in the generator |
+| How many customers does the shop have? | Merging second accounts of one person (chapter 4) | Customers in the generator |
+| How much did the shop really earn? | dbt reporting tables (chapter 6) | The same shop without issues |
+| Do daily runs give the same as a full load? | Airflow day by day against one load (chapter 7) | A full load of the same days |
 
-## 2. Skąd wiadomo, co jest prawdą
+## 2. How we know the truth
 
-Data Generator v1.7.1 tworzy sklep dwa razy z tym samym ziarnem losowania (seed 42, czyli ten sam punkt startu
-losowania, więc ten sam sklep). Raz wstrzykuje błędy jakości na poziomie „medium” (ok. 3% wierszy na rodzaj błędu),
-raz nie wstrzykuje żadnych. Błędy mają własny strumień losowania, więc poza nimi oba sklepy są identyczne.
+Data Generator v1.7.1 builds the shop twice with the same random seed (seed 42: the same starting point of the random
+draws, so the same shop). Once it injects data quality issues at the "medium" level (about 3% of rows per kind of
+issue), once it injects none. The issues come from their own random stream, so apart from them both shops are
+identical.
 
-Klucz odpowiedzi to:
+The answer key is:
 
-- `quality_issue_data`: każdy wstrzyknięty błąd z tabelą, kluczem wiersza, kolumną, wartością w pliku
-  i prawdziwą wartością;
-- tabele generatora: status zamówienia, status płatności, spóźnienie dostawy, historia cen i lista klientów.
+- `quality_issue_data`: every injected issue with its table, row key, column, the value in the file and the true
+  value;
+- the generator's tables: order status, payment status, late delivery, price history and the list of customers.
 
-Hurtownia klucza nie widzi. Do plików dziennych nie trafia żadna kolumna prawdy, dbt czyta tylko pliki, a z kluczem
-porównuje dopiero `score.py` po zbudowaniu hurtowni. Każdy wstrzyknięty błąd dostaje jedną ocenę:
+The warehouse never sees the key. No truth column lands in the daily files, dbt reads only the files, and only
+`score.py` compares with the key after the warehouse is built. Every injected issue gets one verdict:
 
-- **naprawiony**: hurtownia go znalazła i trzyma prawdziwą wartość;
-- **złapany**: znalazła, ale prawdziwej wartości nie ma w danych (np. brak telefonu), więc zostawia ją pustą;
-- **źle naprawiony**: znalazła, ale wpisała inną wartość niż prawdziwa;
-- **przeoczony**: nie znalazła.
+- **fixed**: the warehouse found it and holds the true value;
+- **caught**: it found it, but the true value is not in the data (a missing phone number), so it keeps it empty;
+- **fixed wrongly**: it found it but wrote another value than the true one;
+- **missed**: it did not find it.
 
-Wykrycie bez błędu w kluczu to fałszywy alarm. Kontrola to sklep bez błędów: hurtownia nie powinna tam zgłosić nic.
+A detection without an issue in the key is a false alarm. The control is the shop without issues: there the warehouse
+should report nothing.
 
-## 3. Pliki dzienne: czy każdy dzień wchodzi raz i w całości?
+## 3. Daily files: does every day load once and in full?
 
-**Pytanie.** Czy hurtownia ma dokładnie to, co systemy sklepu wysłały, także gdy dzień przyjdzie później albo
-zostanie uruchomiony drugi raz?
+**Question.** Does the warehouse hold exactly what the shop's systems sent, also when a day arrives late or runs a
+second time?
 
-**Co robi hurtownia.** Plik dnia niesie tylko to, co system wiedział tego dnia: zamówienie przychodzi bez statusu,
-a status dochodzi później jako zdarzenia (opłacone, wysłane, dostarczone, zwrócone). Ładowanie sprawdza każdy plik
-z manifestem (liczba wierszy i SHA-256, czyli odcisk treści, który zmienia się przy każdej zmianie pliku) oraz
-nagłówek kolumn. Potem usuwa dzień i wstawia go od nowa w jednej transakcji (zapis wchodzi cały albo wcale), więc
-ponowne ładowanie daje te same tabele (ładowanie idempotentne). Wszystko trafia do schematu `raw` jako tekst,
-z datą wyciągu i nazwą pliku.
+**What we did.** A day's file carries only what the system knew that day: an order arrives without its status, and
+the status follows later as events (paid, shipped, delivered, returned). Loading checks every file against the
+manifest (row count and SHA-256, a fingerprint that changes with any change to the file) and the column header.
+Then it deletes the day and inserts it again in one transaction (the write goes in whole or not at all), so loading
+again gives the same tables (idempotent loading). Everything lands in the `raw` schema as text, with the extract
+date and the file name.
 
-**Jak to sprawdzamy.** Test dbt porównuje dziennik ładowań z liczbą wierszy w `raw`. Testy pytest psują plik
-(dopisany wiersz, zmieniona kolumna, brak manifestu) i sprawdzają, że ładowanie staje i niczego w hurtowni
-nie zmienia.
+**How we check it.** A dbt test compares the load log with the row counts in `raw`. pytest tests break a file (an
+extra row, a renamed column, a missing manifest) and check that loading stops and changes nothing in the warehouse.
 
-**Wynik.**
+**Result.**
 
 <!-- generated:loads -->
-Hurtownia przyjęła 776 dni po 10 plików (7 760 plików, 219 278 zdarzeń zamówień). Najwięcej linii zamówień, 867,
-przyszło 29 lis 2024, w tygodniu Black Friday.
+The warehouse took 776 days of 10 files (7,760 files, 219,278 order events). The busiest file, 29 Nov 2024, brought 867
+order lines in the Black Friday week.
 
-![776 dziennych zrzutów, szczyt 29 lis 2024: 867 linii zamówień](docs/img/daily-loads.png)
+![776 daily drops, the busiest on 29 Nov 2024: 867 order lines](docs/img/daily-loads.png)
 <!-- /generated:loads -->
 
-**Co to znaczy dla sklepu.** Spóźniony albo powtórzony dzień nie dubluje sprzedaży, a uszkodzony plik zatrzymuje
-ładowanie, zanim cokolwiek zmieni w raportach.
+**What it means for the shop.** A late or repeated day does not double the sales, and a broken file stops the load
+before it changes anything in the reports.
 
-## 4. Czyszczenie: ile błędów łapią reguły i testy?
+## 4. Cleaning: how many issues do the rules and tests catch?
 
-**Pytanie.** Ile błędów jest w danych klientów, produktów i zamówień? Które da się naprawić, a co zostaje nieznane?
+**Question.** How many errors are in the customer, product and order data? Which can be fixed, and what stays
+unknown?
 
-**Co robi hurtownia.** Warstwa staging w dbt (pierwsza warstwa modeli: typy, czyszczenie, każdy rekord raz)
-stosuje reguły zapisane w SQL. Telefon w dowolnym zapisie staje się `+48` i dziewięcioma cyframi, miasto pochodzi
-z kodu pocztowego, a niemożliwy wiek staje się nieznany. Dwa konta z tym samym numerem konta bankowego to jedna osoba.
-Cena zakupu ponad pięć razy wyższa od ceny netto to cena wpisana w groszach. Ilość ponad 20 sztuk na linii hurtownia
-odtwarza z kwoty płatności (kwota = linie po rabacie + dostawa). Każde wykrycie trafia do dziennika
-`quality.dq_issues`, a każda reguła ma test dbt z poziomem ostrzeżenia, więc `dbt build` pokazuje, ile znalazła.
+**What we did.** The staging layer in dbt (the first layer of models: types, cleaning, each record once) applies
+rules written in SQL. A phone number in any notation becomes `+48` and nine digits, the city comes from the postal
+code, and an impossible age becomes unknown. Two accounts with the same bank account number are one person. A
+purchase price over five times the net list price is a price typed in grosze (hundredths of a złoty). The warehouse
+recovers a quantity over 20 units on a line from the payment amount (amount = lines after discount + delivery). Every
+detection goes to the log `quality.dq_issues`, and every rule has a dbt test with warning severity, so `dbt build`
+shows how many it found.
 
-**Jak to sprawdzamy.** `score.py` łączy dziennik z kluczem po tabeli, kluczu wiersza oraz kolumnie i ocenia każdy błąd
-(rozdział 2). Wartości porównuje w jednym zapisie (np. `720 731 397` i `+48720731397` to ten sam numer).
+**How we check it.** `score.py` joins the log with the key on table, row key and column and grades every issue
+(chapter 2). It compares values in one notation (for example `720 731 397` and `+48720731397` are the same number).
 
-**Wynik.**
+**Result.**
 
 <!-- generated:quality -->
-dbt build na sklepie z błędami: 90 testów zielonych i 15 ostrzeżeń, po jednym na regułę jakości; 5 testów jednostkowych
-reguł przechodzi. Klucz odpowiedzi: 8 958 błędów naprawionych, 4 493 złapanych bez możliwej naprawy, 0 przeoczonych albo
-źle naprawionych, 0 fałszywych alarmów. Jeszcze 220 wykryć to kopie błędu oryginału na drugich kontach (generator
-kopiuje konto razem z jego błędami).
+dbt build on the shop with issues: 90 tests pass and 15 warn, one per quality rule; 5 unit tests of the rules pass.
+Against the answer key: 8,958 issues fixed, 4,493 found without a possible fix, 0 missed or fixed wrongly, 0 false
+alarms. Another 220 detections are copies of the original's issue on second accounts (the generator copies an account
+with its issues).
 
-![Hurtownia znajduje każdy z 13 451 błędów i naprawia 8 958](docs/img/quality-issues.png)
+![All 13,451 injected issues found, 8,958 fixed](docs/img/quality-issues.png)
 <!-- /generated:quality -->
 
-**Co to znaczy dla sklepu.** Hurtownia mówi wprost, czego nie wie: brakującego telefonu czy koloru nie zgaduje,
-tylko zostawia pustą wartość i liczy takie przypadki.
+**What it means for the shop.** The warehouse says plainly what it does not know: a missing phone number or colour
+stays empty, and the warehouse counts such cases.
 
-## 5. Schemat gwiazdy: czy hurtownia sama składa fakty jak generator?
+## 5. Star schema: does the warehouse build facts the way the generator does?
 
-**Pytanie.** Czy fakty, których nie ma w żadnym pliku wprost (aktualny status zamówienia, cena w dniu zamówienia,
-liczba klientów), wychodzą takie jak w generatorze?
+**Question.** Do the facts that no file gives directly (an order's current status, the price on the order day, the
+number of customers) come out as in the generator?
 
-**Co robi hurtownia.** Warstwa core to schemat gwiazdy: tabele faktów (linie zamówień, zamówienia, sesje, zwroty,
-opinie) w środku i tabele wymiarów (klient, produkt, data, kampania) dookoła. Status zamówienia to ostatnie
-zdarzenie z jego dziennika. Produkt ma historię wersji (SCD2, czyli wymiar wolno zmienny typu 2: nowy wiersz przy
-każdej zmianie ceny, z datami od i do), liczoną z historii wyciągów zamiast z migawek dbt. Dzięki temu ładowanie
-wstecz daje tę samą historię. Modele core mają kontrakty: dbt sprawdza nazwy i typy kolumn przed zapisem.
+**What we did.** The core layer is a star schema: fact tables (order lines, orders, sessions, returns, reviews) in the
+middle and dimension tables (customer, product, date, campaign) around them. An order's status is the latest event in
+its log. A product has a version history (SCD2, a type 2 slowly changing dimension: a new row on every price change,
+with from and to dates), built from the history of extracts instead of dbt snapshots, so a backfill gives the same
+history. The core models have contracts: dbt checks column names and types before writing.
 
-**Jak to sprawdzamy.** `score.py` porównuje każdy złożony fakt z tabelą generatora.
+**How we check it.** `score.py` compares every assembled fact with the generator's own table.
 
-**Wynik.**
+**Result.**
 
 <!-- generated:core -->
-| Fakt złożony przez hurtownię | Sprawdzone | Zgodne |
+| Fact the warehouse built | Checked | Agree |
 |---|---:|---:|
-| Status zamówienia z dziennika zdarzeń = status w generatorze | 55 568 | 55 568 |
-| Status płatności = status w generatorze | 55 568 | 55 568 |
-| Spóźniona dostawa = znacznik generatora | 52 452 | 52 452 |
-| Cena wersji produktu z linii = cena w historii generatora tego dnia | 80 326 | 80 326 |
-| Konto przypisane do właściwej osoby (drugie konta według klucza) | 41 200 | 41 200 |
+| Order status from the event log = status in the generator | 55,568 | 55,568 |
+| Payment status = status in the generator | 55,568 | 55,568 |
+| Late delivery = generator's flag | 52,452 | 52,452 |
+| List price of the line's product version = generator's price that day | 80,326 | 80,326 |
+| Account mapped to its person (second accounts from the answer key) | 41,200 | 41,200 |
 <!-- /generated:core -->
 
-**Co to znaczy dla sklepu.** Raport o zamówieniach, cenach i klientach liczony z hurtowni zgadza się z tym, co
-działo się naprawdę, choć żaden plik nie podaje tych liczb wprost.
+**What it means for the shop.** A report on orders, prices and customers from the warehouse matches what really
+happened, although no file states these numbers directly.
 
-## 6. Raport z surowych plików kontra hurtownia
+## 6. A report from the raw files against the warehouse
 
-**Pytanie.** Ile myli się raport, który ktoś policzy wprost z plików, bez hurtowni?
+**Question.** How far off is a report that someone counts straight from the files, without a warehouse?
 
-**Co robi hurtownia.** Tabele raportowe (marts: sprzedaż dzienna, ruch na stronie, kohorty, czyli klienci
-pogrupowani po miesiącu pierwszego zakupu) liczą przychód netto i marżę brutto z linii po czyszczeniu. Dla
-porównania te same linie liczymy wprost z plików: z kopiami, z wpisanymi ilościami i z cenami w groszach.
+**What we did.** The reporting tables (marts: daily sales, website traffic and cohorts, which are customers grouped
+by the month of their first purchase) compute net revenue and gross margin from the cleaned lines. For comparison we
+count the same lines straight from the files: with copies, typed quantities and prices in grosze.
 
-**Jak to sprawdzamy.** Prawdą jest ten sam sklep bez błędów: hurtownia na danych z błędami powinna dać prawie te same
-sumy co na czystych.
+**How we check it.** The truth is the same shop without issues: the warehouse on data with issues should give almost
+the same totals as on clean data.
 
-**Wynik.**
+**Result.**
 
 <!-- generated:gap -->
-Przychód netto w hurtowni: 35,7 mln zł, w raporcie z surowych plików 60,8 mln zł (+70%). Marża brutto: 12,7 mln zł
-kontra 8,9 mln zł (−30%). Klientów 40 000, a kont w plikach 41 200.
+Net revenue in the warehouse: 35.7M PLN, in a report from the raw files 60.8M PLN (+70%). Gross margin: 12.7M PLN
+against 8.9M PLN (−30%). 40,000 customers, while the files hold 41,200 accounts.
 
-![Raport z surowych plików zawyża przychód netto o 70%](docs/img/raw-vs-warehouse.png)
+![A report from the raw files overstates net revenue by 70%](docs/img/raw-vs-warehouse.png)
 <!-- /generated:gap -->
 
-**Co to znaczy dla sklepu.** Zdublowane linie, niemożliwe ilości i ceny zakupu w groszach wystarczą, żeby raport
-z plików pokazał nieistniejącą sprzedaż oraz marżę, która w niektórych miesiącach spada poniżej zera.
+**What it means for the shop.** Duplicated lines, impossible quantities and purchase prices in grosze are enough for
+a report from the files to show sales that never happened and a margin that drops below zero in some months.
 
-## 7. Airflow: czy dzień po dniu wychodzi to samo?
+## 7. Airflow: does day by day give the same?
 
-**Pytanie.** Czy hurtownia budowana codziennie, jak na produkcji, kończy z tymi samymi tabelami co jedno pełne
-ładowanie?
+**Question.** Does a warehouse built every day, as in production, end with the same tables as one full load?
 
-**Co robi hurtownia.** DAG Airflow (opis kolejnych zadań, które Airflow uruchamia codziennie) czeka na manifest
-dnia, ładuje dzień i uruchamia `dbt build` tylko dla tego dnia. Modele faktów są przyrostowe: przeliczają tylko
-zamówienia, które tego dnia dostały linię, zdarzenie, płatność, wysyłkę albo zwrot. Airflow i dbt potrzebują różnych
-wersji pakietów, więc Airflow ma własne środowisko i wywołuje kroki projektu przez jego linię poleceń.
+**What we did.** The Airflow DAG (the list of tasks Airflow runs every day) waits for the day's manifest, loads the
+day and runs `dbt build` for that day only. The fact models are incremental: they recompute only the orders that got
+a line, an event, a payment, a shipment or a return that day. Airflow and dbt need different package versions, so
+Airflow has its own environment and calls the project's steps through its command line.
 
-**Jak to sprawdzamy.** `main.py --daily` buduje pierwsze dni dzień po dniu i porównuje skróty wszystkich tabel
-z pełnym ładowaniem. W CI (automatycznych testach na GitHubie po każdym pushu) prawdziwy Airflow 3.4 uruchamia DAG
-dla pięciu dni małego sklepu, powtarza jeden z nich i porównuje wynik z pełnym ładowaniem.
+**How we check it.** `main.py --daily` builds the first days one by one and compares hashes of every table with a
+full load. In CI (automated tests on GitHub after every push) a real Airflow 3.4 runs the DAG for five days of a small
+shop, repeats one of them and compares the result with a full load.
 
-**Wynik.**
+**Result.**
 
 <!-- generated:daily -->
-Pierwsze 14 dni ładowane dzień po dniu dają 13 tabel warstw core, marts i quality równych bajt w bajt pełnemu ładowaniu
-tych samych dni (zgodne).
+The first 14 days loaded one by one give 13 tables of the core, marts and quality layers equal byte for byte to a full
+load of the same days (equal).
 <!-- /generated:daily -->
 
-**Co to znaczy dla sklepu.** Codzienne ładowanie, ponowne uruchomienie dnia i odbudowa historii od zera dają te same
-raporty.
+**What it means for the shop.** The daily load, a rerun of a day and rebuilding the history from scratch give the
+same reports.
 
-## 8. Hurtownia kontra prawda
+## 8. Warehouse against the truth
 
 <!-- generated:verdicts -->
-| Pytanie | Odpowiedź hurtowni | Prawda | Ocena |
+| Question | Warehouse answer | Truth | Verdict |
 |---|---|---|---|
-| Błędy, których prawda jest w danych (rodzaje: 8): czy wraca prawdziwa wartość? | naprawione 8 105 | 8 105 w kluczu | trafione |
-| Braki i niemożliwe wartości (rodzaje: 5): czy hurtownia je łapie bez zgadywania? | nieznane 3 900 | 3 900 w kluczu | trafione, prawdy nie ma w danych |
-| Brak operatora płatności: czy da się naprawić? | naprawione 629, nieznane 576 | 1 205 w kluczu | częściowo |
-| Ilość od 50 do 500 sztuk: czy da się naprawić? | naprawione 224, nieznane 17 | 241 w kluczu | częściowo |
-| Status, płatność, spóźnienie, cena, klienci: czy zgadzają się z generatorem? | jak w rozdziale 5 | tabele generatora | trafione |
+| Issues whose truth is in the data (8 kinds): does the true value come back? | fixed 8,105 | 8,105 in the key | hit |
+| Missing and impossible values (5 kinds): are they caught without guessing? | unknown 3,900 | 3,900 in the key | hit, no truth in the data |
+| Payment provider missing: can it be fixed? | fixed 629, unknown 576 | 1,205 in the key | partial |
+| Quantity of 50 to 500 units: can it be fixed? | fixed 224, unknown 17 | 241 in the key | partial |
+| Status, payment, lateness, price, customers: do they agree with the generator? | as in chapter 5 | generator tables | hit |
 
-Kontrola: ten sam sklep bez błędów daje 0 wykryć, a 105 z 105 testów dbt przechodzi bez ostrzeżeń. Fałszywe alarmy na
-sklepie z błędami: 0. Pełna lista rodzajów błędów: [docs/quality-issues.md](docs/quality-issues.md).
+Control: the same shop without issues gives 0 detections, and 105 of 105 dbt tests pass without a warning. False alarms
+on the shop with issues: 0. Every kind of issue: [docs/quality-issues.md](docs/quality-issues.md).
 <!-- /generated:verdicts -->
 
-**Gdzie reguły się pomyliły i czego to uczy.** W końcowym wyniku nie ma pomyłek, ale po drodze klucz odpowiedzi
-złapał trzy. Czwarty punkt to granica tego, co da się odtworzyć:
+**Where the rules went wrong and what it teaches.** The final result has no misses, but along the way the answer key
+caught three. The fourth point is the limit of what can be recovered:
 
-- Reguła „cena zakupu nie wyższa od ceny netto” na pierwszych dniach oznaczała prawdziwe ceny jako błąd, bo część
-  produktów startowała z ceną katalogową poniżej kosztu. Lekcja: próg z danych, a nie z założenia (w czystym
-  sklepie cena zakupu nie przekracza dwóch cen netto, a cena wpisana w groszach jest wielokrotnie wyższa).
-- Test relacji „sesja → zamówienie” był czerwony w trybie dziennym: sesja sprzed północy kończy się zamówieniem
-  zapisanym w pliku następnego dnia. Lekcja: dane przychodzą z opóźnieniem i test musi to uwzględniać.
-- Generator przy kopii konta bez e-maila zapisał tekst `None`. Reguła formatu najpierw zostawiła go jako adres
-  `none`. Lekcja: adres bez `@` to brak adresu.
-- Części ilości nie da się odtworzyć: zamówienie bez wysyłki nie ma znanej opłaty za dostawę. Lekcja: hurtownia
-  mówi „nie wiem”, zamiast zgadywać.
+- The rule "purchase price not above the net list price" flagged real prices as errors on the first days, because
+  some products started with a list price below cost. Lesson: take the threshold from the data (in the clean shop
+  the purchase price stays below twice the net price, while a price in grosze is many times higher).
+- The relationship test "session → order" failed in daily mode: a session before midnight ends with an order written
+  to the next day's file. Lesson: data arrives late, and the test has to allow for it.
+- The generator wrote the text `None` for a copied account without an e-mail. The format rule first kept it as the
+  address `none`. Lesson: an address without `@` is no address.
+- Some quantities cannot be recovered: an order that never shipped has no known delivery fee. Lesson: when the data
+  cannot tell, the warehouse says "I don't know".
 
-Pomyłki pokazane wprost są atutem: ocenę wystawia kod na podstawie klucza, więc może powiedzieć „przeoczone”.
-Dlatego „trafione” w tabeli coś znaczy.
+Showing the misses openly is what makes the grading credible: code checks the warehouse against the key and can say
+"missed", so a "hit" in the table carries weight.
 
-## 9. Wnioski i ograniczenia
+## 9. Takeaways and limitations
 
-**Rekomendacje.**
+**Recommendations.**
 
-1. Nie licz raportów wprost z plików: kopie i błędne jednostki zawyżają sprzedaż i psują marżę.
-2. Każdą regułę czyszczenia trzymaj w jednym miejscu (dbt) z dziennikiem wykryć i testem, który go liczy.
-3. Wartości, których nie ma w danych, zostawiaj puste i licz je, zamiast zgadywać.
-4. Ładuj dzień w całości albo wcale i sprawdzaj, że dzień po dniu daje to samo co pełne ładowanie.
+1. Do not count reports straight from the files: copies and wrong units inflate sales and spoil the margin.
+2. Keep every cleaning rule in one place (dbt) with a log of detections and a test that counts them.
+3. Keep values that are not in the data empty and count them instead of guessing.
+4. Load a day in full or not at all, and check that day by day gives the same as a full load.
 
-**Ograniczenia.**
+**Limitations.**
 
-- Dane są syntetyczne: błędy mają znane rodzaje i proporcje. W prawdziwym sklepie pojawią się inne, a próg ceny
-  zakupu trzeba by wyznaczyć z jego danych.
-- Jedno ziarno losowania i jeden poziom błędów („medium”).
-- Bez klucza odpowiedzi kontrolą zostają dziennik wykryć, testy dbt i uzgodnienia sum między warstwami.
-- Przyrostowe są tylko tabele faktów; warstwy pośrednie, wymiary i tabele raportowe dbt liczy co dzień od nowa.
-  Przy tej skali to sekundy, ale przy latach historii przyrostowe musiałyby być też warstwy pośrednie.
-- Airflow działa tylko w CI na Linuksie; na Windowsie te same kroki uruchamia `main.py`.
+- The data is synthetic: the issues have known kinds and shares. A real shop will have others, and the purchase
+  price threshold would have to come from its data.
+- One random seed and one issue level ("medium").
+- Without an answer key the checks left are the detection log, the dbt tests and totals reconciled between layers.
+- Only the fact tables are incremental; dbt rebuilds the intermediate layer, the dimensions and the reporting tables
+  every day. At this scale that takes seconds, but with years of history the intermediate layer would have to be
+  incremental too.
+- Airflow runs only in CI on Linux; on Windows `main.py` runs the same steps.
 
-## Szybki start
+## Quickstart
 
-Potrzebujesz Gita i Pythona 3.11. Sklonuj repozytorium:
+You need Git and Python 3.11. Clone the repository:
 
 ```bash
 git clone https://github.com/tlabedzki/Shop-Data-Warehouse.git
 cd Shop-Data-Warehouse
 ```
 
-<details><summary>Utwórz i włącz środowisko wirtualne z Pythonem 3.11 (Windows, macOS i Linux)</summary>
+<details><summary>Create and activate a virtual environment with Python 3.11 (Windows, macOS and Linux)</summary>
 
-Podanie wersji wybiera Pythona 3.11, nawet jeśli domyślny jest inny.
+Naming the version picks Python 3.11 even if another one is the default.
 
-| Krok | Windows (PowerShell) | macOS i Linux |
+| Step | Windows (PowerShell) | macOS and Linux |
 |---|---|---|
-| Utwórz | `py -3.11 -m venv .venv` | `python3.11 -m venv .venv` |
-| Włącz | `.venv\Scripts\Activate.ps1` | `source .venv/bin/activate` |
-| Sprawdź | `python --version` pokazuje `Python 3.11.x` | `python --version` pokazuje `Python 3.11.x` |
+| Create | `py -3.11 -m venv .venv` | `python3.11 -m venv .venv` |
+| Activate | `.venv\Scripts\Activate.ps1` | `source .venv/bin/activate` |
+| Check | `python --version` prints `Python 3.11.x` | `python --version` prints `Python 3.11.x` |
 
-Jeśli PowerShell mówi, że uruchamianie skryptów jest wyłączone, uruchom raz
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` i włącz środowisko jeszcze raz.
+If PowerShell says that running scripts is disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once
+and activate again.
 
 </details>
 
-Potem zainstaluj pakiety i zbuduj hurtownię:
+Then install the packages and build the warehouse:
 
 ```bash
 pip install -r requirements.txt
 python main.py --daily
 ```
 
-Pierwsze uruchomienie pobiera Data Generator z GitHuba, generuje oba sklepy, zapisuje pliki dzienne, buduje dwie
-hurtownie i wpisuje wynik do `output/results.json` (ok. 4 minut; kolejne bez generowania ok. 2 minut).
+The first run downloads Data Generator from GitHub, generates both shops, writes the daily files, builds two
+warehouses and writes the result to `output/results.json` (about 4 minutes; later runs without generating about 2).
 
-### Aplikacja
+### App
 
-`python -m ui.app` otwiera pod adresem http://127.0.0.1:8050 cztery sekcje: ładowania, błędy kontra klucz, raport
-z plików kontra hurtownia i dowody. Ctrl+C zatrzymuje serwer.
+`python -m ui.app` opens four sections at http://127.0.0.1:8050: loads, issues against the key, raw files against
+the warehouse, and proofs. Ctrl+C stops the server.
 
-### dbt i Airflow
+### dbt and Airflow
 
-Model dbt jest w `dbt/`; `dbt docs generate` i `dbt docs serve` z `--project-dir dbt --profiles-dir dbt` pokazują
-dokumentację i graf zależności. DAG leży w `airflow/dags/`, a jego uruchomienie opisuje job `airflow` w
-[tests.yml](.github/workflows/tests.yml).
+The dbt project is in `dbt/`; `dbt docs generate` and `dbt docs serve` with `--project-dir dbt --profiles-dir dbt`
+show the documentation and the dependency graph. The DAG is in `airflow/dags/`, and the `airflow` job in
+[tests.yml](.github/workflows/tests.yml) shows how to run it.
 
-## Dane
+## Data
 
-Dane są syntetyczne: [Data Generator](https://github.com/tlabedzki/Data-Generator) v1.7.1, seed 42, lata
-2023–2024, poziom błędów „medium” i „none”. Kod generatora jest pobierany i uruchamiany bez zmian
-(`src/shop_warehouse/source.py`). Słownik kodów pocztowych z miastami (`dbt/seeds/postal_codes.csv`) pochodzi
-z tego samego pliku generatora. Źródło: ZnajdzKod.pl na podstawie PRG (GUGiK) i TERYT (GUS), stan 16.09.2026
-(atrybucja po polsku, jak wymaga źródło). Nazwy marek produktów są prawdziwe, a same produkty fikcyjne.
+The data is synthetic: [Data Generator](https://github.com/tlabedzki/Data-Generator) v1.7.1, seed 42, years
+2023–2024, issue levels "medium" and "none". The generator's code is downloaded and run unchanged
+(`src/shop_warehouse/source.py`). The list of postal codes with their cities (`dbt/seeds/postal_codes.csv`) comes
+from the same generator file. Source: ZnajdzKod.pl na podstawie PRG (GUGiK) i TERYT (GUS), stan 16.09.2026
+(attribution in Polish, as required by the source). Product brand names are real; the products are fictional.
 
-Schemat gwiazdy (klucze i 1–2 pola na tabelę; pełny diagram w [docs/erd.md](docs/erd.md), zależności modeli
-w [docs/lineage.md](docs/lineage.md)):
+The star schema (keys and 1–2 fields per table; the full diagram is in [docs/erd.md](docs/erd.md), the model
+dependencies in [docs/lineage.md](docs/lineage.md)):
 
 <!-- generated:erd -->
 ```mermaid
@@ -376,42 +380,42 @@ erDiagram
 ```
 <!-- /generated:erd -->
 
-## Struktura projektu
+## Project structure
 
-<details><summary>Pokaż drzewo</summary>
+<details><summary>Show the tree</summary>
 
 ```
-main.py                     cały przebieg: generowanie, pliki, ładowanie, dbt, ocena (--daily: dzień po dniu)
+main.py                     the whole run: generate, land, load, dbt, grade (--daily: day by day)
 src/shop_warehouse/
-  source.py                 Data Generator: klon wydania i dwa sklepy
-  landing.py                pliki dzienne CSV z manifestem
-  load.py                   ładowanie dnia do schematu raw w DuckDB
-  pipeline.py               kroki wspólne dla main.py i Airflow; dbt build
-  cli.py                    linia poleceń wywoływana przez DAG
-  score.py                  ocena względem klucza odpowiedzi (jedyne miejsce, które czyta prawdę)
-  report.py, figures.py     liczby, tytuły i wykresy dla aplikacji i README
-dbt/                        staging → intermediate → core → marts, quality; testy, kontrakty, słownik kodów
-airflow/dags/               dzienny DAG; airflow/tests: test jego struktury
-ui/                         aplikacja Dash + Mantine
-scripts/                    wykresy i liczby README, animacja, ERD z manifestu dbt
+  source.py                 Data Generator: clone a release, two shops
+  landing.py                daily CSV files with a manifest
+  load.py                   load a day into the raw schema in DuckDB
+  pipeline.py               steps shared by main.py and Airflow; dbt build
+  cli.py                    command line the DAG calls
+  score.py                  grading against the answer key (the only place that reads the truth)
+  report.py, figures.py     numbers, titles and charts for the app and the README
+dbt/                        staging → intermediate → core → marts, quality; tests, contracts, postal codes
+airflow/dags/               daily DAG; airflow/tests: a test of its structure
+ui/                         Dash + Mantine app
+scripts/                    README charts and numbers, the animation, the ERD from the dbt manifest
 tests/                      pytest
 ```
 
 </details>
 
-## Testy
+## Tests
 
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-26 testów pytest (ok. 45 s) sprawdza pliki dzienne, ładowanie i jego odporność na zepsute pliki, ocenę względem
-klucza, aplikację oraz zbudowanie małego sklepu przez dbt w pełnym i dziennym trybie. Do tego 105 testów danych
-dbt i 5 testów jednostkowych reguł czyszczenia w każdym `dbt build`, a w CI test DAG-a w prawdziwym Airflow.
+26 pytest tests (about 45 s) check the daily files, loading and how it handles broken files, grading against the key,
+the app, and building a small shop through dbt in full and daily mode. On top of that, every `dbt build` runs 105 dbt
+data tests and 5 unit tests of the cleaning rules, and CI tests the DAG in a real Airflow.
 
-## Licencja
+## License
 
-MIT, zobacz [LICENSE](LICENSE). [Changelog](CHANGELOG.md).
+MIT, see [LICENSE](LICENSE). [Changelog](CHANGELOG.md).
 
-Ostatnia aktualizacja README: 2026-11-27
+README last updated: 2026-11-27
