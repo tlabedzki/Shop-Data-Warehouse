@@ -17,3 +17,4 @@ airflow/home/
 *.pkl
 *.joblib
 .env
+dbt/.user.yml

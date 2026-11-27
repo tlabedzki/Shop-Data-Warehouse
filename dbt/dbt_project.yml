@@ -10,6 +10,9 @@ macro-paths: ["macros"]
 target-path: "target"
 clean-targets: ["target", "logs"]
 
+flags:
+  send_anonymous_usage_stats: false
+
 vars:
   # Set by the daily run (Airflow or main.py --daily): incremental models then read only this extract date.
   run_date: null
