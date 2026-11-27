@@ -36,7 +36,7 @@ def quality_bars(frame: pd.DataFrame, language: str = "en", height: int | None =
     """One bar per kind of issue: fixed (teal), caught but unknowable (mist), missed or fixed wrongly (copper)."""
     words = report.WORDS[language]
     frame = frame.iloc[::-1]
-    labels = frame["problem"].tolist()
+    labels = [label.replace("-", "\u2010") for label in frame["problem"]]
     fig = go.Figure()
     for column, color in (("fixed", t.PRIMARY), ("caught", t.MIST), ("missed", t.ACCENT)):
         values = frame[column] + (frame["wrong"] if column == "missed" else 0)
@@ -61,18 +61,21 @@ def _time_axis(fig: go.Figure, months: pd.Series, language: str) -> None:
                      fixedrange=True)
 
 
-def _value_axis(fig: go.Figure, values: pd.Series, language: str) -> None:
-    """A few round gridlines labelled in the chart's number format."""
-    top = float(values.max())
-    step = 10 ** math.floor(math.log10(top)) if top > 0 else 1
-    if top / step < 2:
+def _value_axis(fig: go.Figure, values: pd.DataFrame | pd.Series, language: str) -> None:
+    """A few round gridlines labelled in the chart's number format; below zero when a value is."""
+    top = float(values.max().max()) if isinstance(values, pd.DataFrame) else float(values.max())
+    low = min(0.0, float(values.min().min()) if isinstance(values, pd.DataFrame) else float(values.min()))
+    span = top - low
+    step = 10 ** math.floor(math.log10(span)) if span > 0 else 1
+    if span / step < 2:
         step /= 5
-    elif top / step < 5:
+    elif span / step < 5:
         step /= 2
-    ticks = [step * i for i in range(int(top // step) + 1)]
-    fig.update_yaxes(gridcolor=t.LINE, zeroline=False, showline=False, ticks="", tickvals=ticks,
-                     ticktext=[report.compact(v, language) if v else "" for v in ticks], tickfont=_num(12, t.MUTED),
-                     fixedrange=True, range=[0, top * 1.06])
+    first = math.floor(low / step)
+    ticks = [step * i for i in range(first, int(top // step) + 1)]
+    fig.update_yaxes(gridcolor=t.LINE, zeroline=low < 0, zerolinecolor=t.MUTED, zerolinewidth=1, showline=False,
+                     ticks="", tickvals=ticks, ticktext=[report.compact(v, language) if v else "" for v in ticks],
+                     tickfont=_num(12, t.MUTED), fixedrange=True, range=[low - span * 0.04, top + span * 0.06])
 
 
 def monthly_lines(frame: pd.DataFrame, metric: str, language: str = "en", height: int = 340) -> go.Figure:
@@ -93,7 +96,7 @@ def monthly_lines(frame: pd.DataFrame, metric: str, language: str = "en", height
         fig.add_annotation(x=last["month"], y=last[column], text=f"<b>{name}</b>", showarrow=False, xanchor="left",
                            xshift=8, font={"family": t.SANS_STACK, "size": 13, "color": color})
     _time_axis(fig, frame["month"], language)
-    _value_axis(fig, frame[[f"{metric}_warehouse", f"{metric}_raw"]].max(axis=1), language)
+    _value_axis(fig, frame[[f"{metric}_warehouse", f"{metric}_raw"]], language)
     return _layout(fig, height, margin={"l": 8, "r": 104, "t": 12, "b": 8})
 
 

@@ -7,6 +7,6 @@ dbt-duckdb~=1.11.1
 plotly~=7.1.0
 dash~=4.5.1
 dash-mantine-components~=3.0.0
-# scripts/get_data.py runs Data-Generator, which needs these two
+# src/shop_warehouse/source.py runs Data-Generator, which needs these two
 Faker~=33.1.0
 colorama~=0.4.6

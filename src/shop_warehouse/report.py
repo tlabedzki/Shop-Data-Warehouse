@@ -167,7 +167,7 @@ def quality_title(frame: pd.DataFrame, language: str = "en") -> tuple[str, str]:
     missed = int(frame["missed"].sum() + frame["wrong"].sum())
     n = lambda value: integer(value, language)  # noqa: E731
     if language == "pl":
-        head = (f"Hurtownia znajduje każdy z {n(injected)} wstrzykniętych błędów i naprawia {n(fixed)}" if not missed
+        head = (f"Hurtownia znajduje każdy z {n(injected)} błędów i naprawia {n(fixed)}" if not missed
                 else f"{n(missed)} z {n(injected)} błędów przeoczone albo źle naprawione")
         sub = ("Jeden słupek to jeden rodzaj błędu. Petrol: wróciła prawdziwa wartość. Szary: błąd znaleziony, ale "
                "prawdziwej wartości nie ma w danych, więc hurtownia zostawia ją pustą.")
@@ -234,10 +234,10 @@ def loads_title(frame: pd.DataFrame, language: str = "en") -> tuple[str, str]:
     peak = frame.loc[frame["order_lines"].idxmax()]
     days, lines = integer(len(frame), language), integer(int(peak["order_lines"]), language)
     if language == "pl":
-        return (f"{days} dziennych zrzutów; najwięcej linii zamówień ({lines}) przyszło {day(peak['day'], language)}",
+        return (f"{days} dziennych zrzutów, szczyt {day(peak['day'], language)}: {lines} linii zamówień",
                 "Linie zamówień w pliku każdego dnia. Zdarzenia przychodzą jeszcze po ostatnim zamówieniu: dostawy, "
                 "zwroty, opinie.")
-    return (f"{days} daily drops; the busiest, {day(peak['day'], language)}, brought {lines} order lines",
+    return (f"{days} daily drops, the busiest on {day(peak['day'], language)}: {lines} order lines",
             "Order lines in each day's file. Events keep coming after the last order: deliveries, returns, reviews.")
 
 
