@@ -1,3 +1,6 @@
 -r requirements.txt
 pytest~=9.2.0
 ruff~=0.17.6
+# scripts/make_charts.py and make_demo_svg.py drive headless Chrome or Edge; the demo SVG embeds WebP crops
+pillow~=13.0.0
+websockets~=15.0.1

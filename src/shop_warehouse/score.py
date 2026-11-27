@@ -131,31 +131,40 @@ def totals(con: duckdb.DuckDBPyConnection) -> dict:
             "sold_orders": int(row[3]), "customers": int(customers)}
 
 
+# Every order line as a report straight from the raw files would count it: each copy, the quantity as typed, the
+# purchase price as typed, no customer merging. Only the order status (from the events) is taken from the warehouse.
+RAW_REPORT_LINES = """
+    with status as (select * from intermediate.int_order_status),
+    lines as (
+        select cast(l.quantity as integer) as quantity, cast(l.unit_price_net as double) as unit_price_net,
+               cast(l.discount_rate as double) as discount_rate, cast(l.order_line_id as bigint) as order_line_id,
+               cast(l.product_id as bigint) as product_id, cast(l.order_datetime as date) as order_date
+        from raw.order_lines l join status s on s.order_id = cast(l.order_id as bigint)
+        where s.order_status not in ('cancelled', 'payment_failed')
+    ),
+    refunds as (select order_line_id, sum(returned_quantity) as q from core.fct_returns
+                where return_status = 'refunded' group by 1),
+    prices as (select cast(product_id as bigint) as product_id, cast(_extract_date as date) as valid_from,
+                      cast(net_purchase_price as double) as cost from raw.products),
+    costed as (
+        select l.*, coalesce(r.q, 0) as refunded,
+               (select arg_max(p.cost, p.valid_from) from prices p
+                where p.product_id = l.product_id and p.valid_from <= l.order_date) as cost
+        from lines l left join refunds r using (order_line_id)
+    )
+    select order_date,
+           (quantity - refunded) * unit_price_net * (1 - discount_rate) as net_revenue,
+           (quantity - refunded) * (unit_price_net * (1 - discount_rate) - cost) as gross_margin,
+           quantity - refunded as units_kept
+    from costed
+"""
+
+
 def naive_totals(con: duckdb.DuckDBPyConnection) -> dict:
     """What a report straight from the raw files would say: every copy counted, no fixes, accounts as customers."""
-    row = con.execute("""
-        with status as (select * from intermediate.int_order_status),
-        lines as (
-            select cast(l.quantity as integer) as quantity, cast(l.unit_price_net as double) as unit_price_net,
-                   cast(l.discount_rate as double) as discount_rate, cast(l.order_line_id as bigint) as order_line_id,
-                   cast(l.product_id as bigint) as product_id, cast(l.order_datetime as date) as order_date
-            from raw.order_lines l join status s on s.order_id = cast(l.order_id as bigint)
-            where s.order_status not in ('cancelled', 'payment_failed')
-        ),
-        refunds as (select order_line_id, sum(returned_quantity) as q from core.fct_returns
-                    where return_status = 'refunded' group by 1),
-        prices as (select cast(product_id as bigint) as product_id, cast(_extract_date as date) as valid_from,
-                          cast(net_purchase_price as double) as cost from raw.products),
-        costed as (
-            select l.*, coalesce(r.q, 0) as refunded,
-                   (select arg_max(p.cost, p.valid_from) from prices p
-                    where p.product_id = l.product_id and p.valid_from <= l.order_date) as cost
-            from lines l left join refunds r using (order_line_id)
-        )
-        select round(sum((quantity - refunded) * unit_price_net * (1 - discount_rate)), 2),
-               round(sum((quantity - refunded) * (unit_price_net * (1 - discount_rate) - cost)), 2),
-               sum(quantity - refunded)
-        from costed""").fetchall()[0]
+    row = con.execute(f"""
+        select round(sum(net_revenue), 2), round(sum(gross_margin), 2), sum(units_kept)
+        from ({RAW_REPORT_LINES})""").fetchall()[0]
     accounts = con.execute("select count(distinct customer_id) from raw.customers").fetchall()[0][0]
     return {"net_revenue": float(row[0]), "gross_margin": float(row[1]), "units_kept": int(row[2]),
             "customers": int(accounts)}
