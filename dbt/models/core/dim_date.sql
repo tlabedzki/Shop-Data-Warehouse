@@ -5,12 +5,12 @@ with bounds as (
 
 select
     cast(day as date) as date_day,
-    year(day) as year,
-    quarter(day) as quarter,
-    month(day) as month,
+    cast(year(day) as integer) as year,
+    cast(quarter(day) as integer) as quarter,
+    cast(month(day) as integer) as month,
     strftime(day, '%Y-%m') as year_month,
-    isodow(day) as iso_weekday,
+    cast(isodow(day) as integer) as iso_weekday,
     strftime(day, '%A') as weekday_name,
     isodow(day) >= 6 as is_weekend,
-    week(day) as iso_week
+    cast(week(day) as integer) as iso_week
 from bounds, range(bounds.first_day, bounds.last_day + interval 1 day, interval 1 day) as days(day)

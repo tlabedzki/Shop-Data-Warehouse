@@ -6,5 +6,5 @@ select
     end_date,
     total_cost,
     voucher_code,
-    datediff('day', start_date, end_date) + 1 as days
+    cast(datediff('day', start_date, end_date) + 1 as integer) as days
 from {{ ref('stg_campaigns') }}

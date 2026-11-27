@@ -1,233 +1,549 @@
 version: 2
-
 models:
-  - name: dim_customer
-    description: One row per customer (person). Second accounts of the same person are merged into the oldest one.
-    columns:
-      - name: customer_id
-        description: Customer key, the id of the person's oldest account.
-        data_tests: [unique, not_null]
-      - name: accounts
-        description: Accounts the person has (2 when a second account was opened).
-      - name: first_name
-        description: Fictional first name.
-      - name: last_name
-        description: Fictional last name.
-      - name: gender
-        description: Male or Female.
-      - name: age
-        description: Age in years; empty when the shop's value was missing or impossible.
-        data_tests:
-          - accepted_range:
-              arguments: {min_value: 18, max_value: 100}
-      - name: email
-        description: E-mail in lower case without spaces.
-        data_tests:
-          - matches_pattern:
-              arguments: {pattern: '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+'}
-      - name: phone_number
-        description: Phone number as +48 and nine digits.
-        data_tests:
-          - matches_pattern:
-              arguments: {pattern: '\+48\d{9}'}
-      - name: postal_code
-        description: Postal code as 00-000.
-        data_tests:
-          - not_null
-          - matches_pattern:
-              arguments: {pattern: '\d{2}-\d{3}'}
-      - name: city
-        description: Main locality of the postal code (from the postal code reference).
-        data_tests: [not_null]
-      - name: signup_date
-        description: Day the oldest account was opened.
-        data_tests: [not_null]
-      - name: acquisition_channel
-        description: Channel that brought the customer.
+- name: dim_customer
+  description: One row per customer (person). Second accounts of the same person are merged into the oldest one.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: customer_id
+    data_type: bigint
+    description: Customer key, the id of the person's oldest account.
+    data_tests: [unique, not_null]
+  - name: accounts
+    data_type: integer
+    description: Accounts the person has (2 when a second account was opened).
+  - name: first_name
+    data_type: varchar
+    description: Fictional first name.
+  - name: last_name
+    data_type: varchar
+    description: Fictional last name.
+  - name: gender
+    data_type: varchar
+    description: Male or Female.
+  - name: age
+    data_type: integer
+    description: Age in years; empty when the shop's value was missing or impossible.
+    data_tests:
+    - accepted_range:
+        arguments:
+          min_value: 18
+          max_value: 100
+  - name: email
+    data_type: varchar
+    description: E-mail in lower case without spaces.
+    data_tests:
+    - matches_pattern:
+        arguments:
+          pattern: '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+'
+  - name: phone_number
+    data_type: varchar
+    description: Phone number as +48 and nine digits.
+    data_tests:
+    - matches_pattern:
+        arguments:
+          pattern: \+48\d{9}
+  - name: postal_code
+    data_type: varchar
+    description: Postal code as 00-000.
+    data_tests:
+    - not_null
+    - matches_pattern:
+        arguments:
+          pattern: \d{2}-\d{3}
+  - name: city
+    data_type: varchar
+    description: Main locality of the postal code (from the postal code reference).
+    data_tests: [not_null]
+  - name: signup_date
+    data_type: date
+    description: Day the oldest account was opened.
+    data_tests: [not_null]
+  - name: acquisition_channel
+    data_type: varchar
+    description: Channel that brought the customer.
+- name: dim_product
+  description: 'Product versions, slowly changing dimension type 2: a new version on every day the catalogue record changed
+    (launch, list price, end of sale). Join a fact on product_version_id, or on product_id with the fact''s date between
+    valid_from and valid_to.
 
-  - name: dim_product
-    description: >
-      Product versions, slowly changing dimension type 2: a new version on every day the catalogue record changed
-      (launch, list price, end of sale). Join a fact on product_version_id, or on product_id with the fact's date
-      between valid_from and valid_to.
-    columns:
-      - name: product_version_id
-        description: Version key, product_id and valid_from (YYYYMMDD).
-        data_tests: [unique, not_null]
-      - name: product_id
-        description: Product key.
-        data_tests: [not_null]
-      - name: valid_from
-        description: First day of this version.
-        data_tests: [not_null]
-      - name: valid_to
-        description: Last day of this version; 9999-12-31 for the current one.
-        data_tests: [not_null]
-      - name: is_current
-        description: The version valid today.
-      - name: sales_price_gross
-        description: List price with VAT in this version, PLN.
-        data_tests:
-          - not_null
-          - accepted_range:
-              arguments: {min_value: 0}
-      - name: sales_price_net
-        description: List price without VAT in this version, PLN.
-      - name: net_purchase_price
-        description: Purchase price without VAT, PLN; a price typed in grosze (over 5 x the list price) is divided by 100.
-        data_tests:
-          - not_null
-          - expression_is_true:
-              arguments:
-                expression: net_purchase_price < 2 * sales_price_net
-      - name: discontinued_date
-        description: Last day of sale, known from that day on.
-      - name: category
-        description: Top level of the catalogue.
-        data_tests: [not_null]
+    '
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: product_version_id
+    data_type: varchar
+    description: Version key, product_id and valid_from (YYYYMMDD).
+    data_tests: [unique, not_null]
+  - name: product_id
+    data_type: bigint
+    description: Product key.
+    data_tests: [not_null]
+  - name: valid_from
+    data_type: date
+    description: First day of this version.
+    data_tests: [not_null]
+  - name: valid_to
+    data_type: date
+    description: Last day of this version; 9999-12-31 for the current one.
+    data_tests: [not_null]
+  - name: is_current
+    data_type: boolean
+    description: The version valid today.
+  - name: sales_price_gross
+    data_type: decimal(12,2)
+    description: List price with VAT in this version, PLN.
+    data_tests:
+    - not_null
+    - accepted_range:
+        arguments:
+          min_value: 0
+  - name: sales_price_net
+    data_type: decimal(12,2)
+    description: List price without VAT in this version, PLN.
+  - name: discontinued_date
+    data_type: date
+    description: Last day of sale, known from that day on.
+  - name: product_name
+    data_type: varchar
+  - name: category
+    data_type: varchar
+    description: Top level of the catalogue.
+    data_tests: [not_null]
+  - name: subcategory
+    data_type: varchar
+  - name: product_type
+    data_type: varchar
+  - name: brand
+    data_type: varchar
+  - name: product_series
+    data_type: varchar
+  - name: product_model
+    data_type: varchar
+  - name: color
+    data_type: varchar
+  - name: parcel_size
+    data_type: varchar
+  - name: currency
+    data_type: varchar
+  - name: net_purchase_price
+    data_type: decimal(12,2)
+    description: Purchase price without VAT, PLN; a price typed in grosze (over 5 x the list price) is divided by 100.
+    data_tests:
+    - not_null
+    - expression_is_true:
+        arguments:
+          expression: net_purchase_price < 2 * sales_price_net
+  - name: launch_date
+    data_type: date
+- name: dim_campaign
+  description: Marketing campaigns.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: campaign_id
+    data_type: bigint
+    description: Campaign key.
+    data_tests: [unique, not_null]
+  - name: campaign_name
+    data_type: varchar
+  - name: channel
+    data_type: varchar
+  - name: start_date
+    data_type: date
+  - name: end_date
+    data_type: date
+  - name: total_cost
+    data_type: decimal(12,2)
+  - name: voucher_code
+    data_type: varchar
+  - name: days
+    data_type: integer
+- name: dim_date
+  description: Calendar from the first to the last loaded day.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: date_day
+    data_type: date
+    description: The day.
+    data_tests: [unique, not_null]
+  - name: year
+    data_type: integer
+  - name: quarter
+    data_type: integer
+  - name: month
+    data_type: integer
+  - name: year_month
+    data_type: varchar
+  - name: iso_weekday
+    data_type: integer
+  - name: weekday_name
+    data_type: varchar
+  - name: is_weekend
+    data_type: boolean
+  - name: iso_week
+    data_type: integer
+- name: fct_order_lines
+  description: 'One row per order line (incremental: a daily run rebuilds the lines of orders that got anything that day).
+    Revenue and margin are without VAT and count only kept units of sold orders.
 
-  - name: dim_campaign
-    description: Marketing campaigns.
-    columns:
-      - name: campaign_id
-        description: Campaign key.
-        data_tests: [unique, not_null]
+    '
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: order_line_id
+    data_type: bigint
+    description: Order line key; a line saved twice in the source is kept once.
+    data_tests: [unique, not_null]
+  - name: order_id
+    data_type: bigint
+    description: Order key.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('fct_orders')
+          field: order_id
+  - name: customer_id
+    data_type: bigint
+    description: Customer (person), see dim_customer.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_customer')
+          field: customer_id
+  - name: account_id
+    data_type: bigint
+    description: Account that placed the order.
+  - name: product_id
+    data_type: bigint
+  - name: product_version_id
+    data_type: varchar
+    description: Product version valid on the order day.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_product')
+          field: product_version_id
+  - name: order_date
+    data_type: date
+    description: Order day.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_date')
+          field: date_day
+  - name: order_datetime
+    data_type: timestamp
+  - name: campaign_id
+    data_type: bigint
+    description: Campaign credited with the order.
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('dim_campaign')
+          field: campaign_id
+  - name: channel
+    data_type: varchar
+  - name: device
+    data_type: varchar
+  - name: order_status
+    data_type: varchar
+    description: Status of the order from its event log.
+    data_tests: [not_null]
+  - name: is_sale
+    data_type: boolean
+  - name: quantity
+    data_type: integer
+    description: Units ordered; empty when the source value was impossible and could not be recovered.
+    data_tests:
+    - accepted_range:
+        arguments:
+          min_value: 1
+          max_value: 20
+  - name: quantity_raw
+    data_type: integer
+  - name: unit_price_gross
+    data_type: decimal(12,2)
+  - name: unit_price_net
+    data_type: decimal(12,2)
+  - name: discount_rate
+    data_type: decimal(5,4)
+  - name: net_purchase_price
+    data_type: decimal(12,2)
+  - name: refunded_quantity
+    data_type: integer
+  - name: refund_amount
+    data_type: decimal(12,2)
+  - name: kept_quantity
+    data_type: integer
+    description: Units sold and not refunded.
+    data_tests:
+    - accepted_range:
+        arguments:
+          min_value: 0
+  - name: line_amount_gross
+    data_type: decimal(14,2)
+  - name: net_revenue
+    data_type: decimal(14,2)
+    description: Kept units × net price after discount, PLN.
+  - name: purchase_cost
+    data_type: decimal(14,2)
+    description: Kept units × purchase price, PLN.
+  - name: gross_margin
+    data_type: decimal(14,2)
+    description: net_revenue − purchase_cost, PLN.
+- name: fct_orders
+  description: One row per order (incremental, like fct_order_lines).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: order_id
+    data_type: bigint
+    description: Order key.
+    data_tests: [unique, not_null]
+  - name: customer_id
+    data_type: bigint
+    description: Customer (person).
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('dim_customer')
+          field: customer_id
+  - name: account_id
+    data_type: bigint
+  - name: order_datetime
+    data_type: timestamp
+  - name: order_date
+    data_type: date
+  - name: order_status
+    data_type: varchar
+    description: Latest event of the order.
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - placed
+          - paid
+          - payment_failed
+          - cancelled
+          - shipped
+          - delivered
+          - returned
+  - name: payment_status
+    data_type: varchar
+    description: paid, refunded, failed or unpaid (cash on delivery not collected).
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - paid
+          - refunded
+          - failed
+          - unpaid
+  - name: cancel_reason
+    data_type: varchar
+  - name: placed_at
+    data_type: timestamp
+  - name: paid_at
+    data_type: timestamp
+  - name: cancelled_at
+    data_type: timestamp
+  - name: shipped_at
+    data_type: timestamp
+  - name: delivered_at
+    data_type: timestamp
+  - name: returned_at
+    data_type: timestamp
+  - name: promised_delivery_date
+    data_type: date
+  - name: is_late
+    data_type: boolean
+    description: Delivered after the promised day.
+  - name: payment_method
+    data_type: varchar
+  - name: payment_provider
+    data_type: varchar
+  - name: delivery_method
+    data_type: varchar
+  - name: shipping_postal_code
+    data_type: varchar
+  - name: channel
+    data_type: varchar
+  - name: device
+    data_type: varchar
+  - name: campaign_id
+    data_type: bigint
+  - name: voucher_code
+    data_type: varchar
+  - name: session_id
+    data_type: bigint
+  - name: lines
+    data_type: integer
+  - name: units
+    data_type: integer
+  - name: lines_without_quantity
+    data_type: integer
+  - name: lines_amount_gross
+    data_type: decimal(14,2)
+  - name: payment_amount
+    data_type: decimal(12,2)
+    description: Amount charged at checkout, PLN with VAT.
+  - name: payment_fee
+    data_type: decimal(12,2)
+    description: Payment operator's fee, PLN.
+  - name: shipping_cost
+    data_type: decimal(12,2)
+  - name: carrier_cost
+    data_type: decimal(12,2)
+  - name: parcel_size
+    data_type: varchar
+  - name: is_bulky
+    data_type: boolean
+- name: fct_sessions
+  description: One row per web session (incremental by extract date).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: session_id
+    data_type: bigint
+    description: Session key.
+    data_tests: [unique, not_null]
+  - name: session_start
+    data_type: timestamp
+  - name: session_date
+    data_type: date
+  - name: customer_id
+    data_type: bigint
+    description: Logged-in customer (person); empty for anonymous visits.
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('dim_customer')
+          field: customer_id
+  - name: account_id
+    data_type: bigint
+  - name: channel
+    data_type: varchar
+  - name: device
+    data_type: varchar
+  - name: campaign_id
+    data_type: bigint
+  - name: pages_viewed
+    data_type: integer
+  - name: added_to_cart
+    data_type: boolean
+  - name: reached_checkout
+    data_type: boolean
+  - name: order_id
+    data_type: bigint
+    description: 'Order placed in the session. A session that starts before midnight can convert after it, so its order
+      lands in the next day''s file; sessions of the last loaded day are left out of the check.
 
-  - name: dim_date
-    description: Calendar from the first to the last loaded day.
-    columns:
-      - name: date_day
-        description: The day.
-        data_tests: [unique, not_null]
-
-  - name: fct_order_lines
-    description: >
-      One row per order line (incremental: a daily run rebuilds the lines of orders that got anything that day).
-      Revenue and margin are without VAT and count only kept units of sold orders.
-    columns:
-      - name: order_line_id
-        description: Order line key; a line saved twice in the source is kept once.
-        data_tests: [unique, not_null]
-      - name: order_id
-        description: Order key.
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('fct_orders'), field: order_id}}
-      - name: customer_id
-        description: Customer (person), see dim_customer.
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('dim_customer'), field: customer_id}}
-      - name: account_id
-        description: Account that placed the order.
-      - name: product_version_id
-        description: Product version valid on the order day.
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('dim_product'), field: product_version_id}}
-      - name: order_date
-        description: Order day.
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('dim_date'), field: date_day}}
-      - name: campaign_id
-        description: Campaign credited with the order.
-        data_tests:
-          - relationships: {arguments: {to: ref('dim_campaign'), field: campaign_id}}
-      - name: order_status
-        description: Status of the order from its event log.
-        data_tests: [not_null]
-      - name: quantity
-        description: Units ordered; empty when the source value was impossible and could not be recovered.
-        data_tests:
-          - accepted_range:
-              arguments: {min_value: 1, max_value: 20}
-      - name: kept_quantity
-        description: Units sold and not refunded.
-        data_tests:
-          - accepted_range:
-              arguments: {min_value: 0}
-      - name: net_revenue
-        description: Kept units × net price after discount, PLN.
-      - name: purchase_cost
-        description: Kept units × purchase price, PLN.
-      - name: gross_margin
-        description: net_revenue − purchase_cost, PLN.
-
-  - name: fct_orders
-    description: One row per order (incremental, like fct_order_lines).
-    columns:
-      - name: order_id
-        description: Order key.
-        data_tests: [unique, not_null]
-      - name: customer_id
-        description: Customer (person).
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('dim_customer'), field: customer_id}}
-      - name: order_status
-        description: Latest event of the order.
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [placed, paid, payment_failed, cancelled, shipped, delivered, returned]
-      - name: payment_status
-        description: paid, refunded, failed or unpaid (cash on delivery not collected).
-        data_tests:
-          - not_null
-          - accepted_values: {arguments: {values: [paid, refunded, failed, unpaid]}}
-      - name: is_late
-        description: Delivered after the promised day.
-      - name: payment_amount
-        description: Amount charged at checkout, PLN with VAT.
-      - name: payment_fee
-        description: Payment operator's fee, PLN.
-
-  - name: fct_sessions
-    description: One row per web session (incremental by extract date).
-    columns:
-      - name: session_id
-        description: Session key.
-        data_tests: [unique, not_null]
-      - name: customer_id
-        description: Logged-in customer (person); empty for anonymous visits.
-        data_tests:
-          - relationships: {arguments: {to: ref('dim_customer'), field: customer_id}}
-      - name: order_id
-        description: >
-          Order placed in the session. A session that starts before midnight can convert after it, so its order
-          lands in the next day's file; sessions of the last loaded day are left out of the check.
-        data_tests:
-          - relationships:
-              arguments: {to: ref('fct_orders'), field: order_id}
-              config:
-                where: "session_date < (select max(extract_date) from raw._load_log)"
-
-  - name: fct_returns
-    description: One row per returned order line.
-    columns:
-      - name: return_id
-        description: Return key.
-        data_tests: [unique, not_null]
-      - name: order_line_id
-        description: Returned order line.
-        data_tests:
-          - not_null
-          - relationships: {arguments: {to: ref('fct_order_lines'), field: order_line_id}}
-
-  - name: fct_reviews
-    description: One row per rating of a delivered order line.
-    columns:
-      - name: review_id
-        description: Review key.
-        data_tests: [unique, not_null]
-      - name: order_line_id
-        description: Rated order line.
-        data_tests:
-          - relationships: {arguments: {to: ref('fct_order_lines'), field: order_line_id}}
-      - name: review_score
-        description: 1 to 5 stars.
-        data_tests:
-          - accepted_range:
-              arguments: {min_value: 1, max_value: 5}
+      '
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('fct_orders')
+          field: order_id
+        config:
+          where: session_date < (select max(extract_date) from raw._load_log)
+  - name: converted
+    data_type: boolean
+- name: fct_returns
+  description: One row per returned order line.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: return_id
+    data_type: bigint
+    description: Return key.
+    data_tests: [unique, not_null]
+  - name: order_id
+    data_type: bigint
+  - name: order_line_id
+    data_type: bigint
+    description: Returned order line.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('fct_order_lines')
+          field: order_line_id
+  - name: product_id
+    data_type: bigint
+  - name: customer_id
+    data_type: bigint
+  - name: account_id
+    data_type: bigint
+  - name: return_date
+    data_type: date
+  - name: returned_quantity
+    data_type: integer
+  - name: return_reason
+    data_type: varchar
+  - name: return_status
+    data_type: varchar
+  - name: refund_amount
+    data_type: decimal(12,2)
+  - name: return_shipping_cost
+    data_type: decimal(12,2)
+  - name: handling_cost
+    data_type: decimal(12,2)
+  - name: written_off_quantity
+    data_type: integer
+  - name: write_off_cost
+    data_type: decimal(12,2)
+- name: fct_reviews
+  description: One row per rating of a delivered order line.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: review_id
+    data_type: bigint
+    description: Review key.
+    data_tests: [unique, not_null]
+  - name: order_id
+    data_type: bigint
+  - name: order_line_id
+    data_type: bigint
+    description: Rated order line.
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('fct_order_lines')
+          field: order_line_id
+  - name: product_id
+    data_type: bigint
+  - name: customer_id
+    data_type: bigint
+  - name: account_id
+    data_type: bigint
+  - name: review_date
+    data_type: date
+  - name: review_score
+    data_type: integer
+    description: 1 to 5 stars.
+    data_tests:
+    - accepted_range:
+        arguments:
+          min_value: 1
+          max_value: 5
+  - name: review_comment
+    data_type: varchar

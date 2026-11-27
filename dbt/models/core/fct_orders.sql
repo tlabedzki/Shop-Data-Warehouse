@@ -31,10 +31,11 @@ orders as (
         min(campaign_id) as campaign_id,
         min(voucher_code) as voucher_code,
         min(session_id) as session_id,
-        count(*) as lines,
-        sum(quantity) as units,
-        count(*) filter (where quantity is null) as lines_without_quantity,
-        round(sum(round(quantity * unit_price_gross * (1 - discount_rate), 2)), 2) as lines_amount_gross
+        cast(count(*) as integer) as lines,
+        cast(sum(quantity) as integer) as units,
+        cast(count(*) filter (where quantity is null) as integer) as lines_without_quantity,
+        cast(round(sum(round(quantity * unit_price_gross * (1 - discount_rate), 2)), 2) as decimal(14, 2))
+            as lines_amount_gross
     from lines
     group by order_id
 )

@@ -17,6 +17,8 @@ jobs:
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest
+      - name: ERD and lineage are up to date with the dbt project
+        run: python scripts/make_docs.py --check
 
   airflow:
     # The DAG in a real Airflow: five days of a small shop with airflow dags test, a rerun of one day, then the

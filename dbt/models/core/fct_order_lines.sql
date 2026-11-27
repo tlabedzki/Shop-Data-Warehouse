@@ -48,8 +48,8 @@ joined as (
         l.unit_price_net,
         l.discount_rate,
         v.net_purchase_price,
-        coalesce(r.refunded_quantity, 0) as refunded_quantity,
-        coalesce(r.refund_amount, 0) as refund_amount
+        cast(coalesce(r.refunded_quantity, 0) as integer) as refunded_quantity,
+        cast(coalesce(r.refund_amount, 0) as decimal(12, 2)) as refund_amount
     from lines as l
     left join {{ ref('int_customer_accounts') }} as a on a.account_id = l.customer_id
     left join {{ ref('int_product_versions') }} as v
@@ -60,11 +60,12 @@ joined as (
 
 select
     *,
-    case when is_sale then quantity - refunded_quantity else 0 end as kept_quantity,
-    round(quantity * unit_price_gross * (1 - discount_rate), 2) as line_amount_gross,
-    round(case when is_sale then (quantity - refunded_quantity) * unit_price_net * (1 - discount_rate) else 0 end, 2)
-        as net_revenue,
-    round(case when is_sale then (quantity - refunded_quantity) * net_purchase_price else 0 end, 2) as purchase_cost,
-    round(case when is_sale then (quantity - refunded_quantity) * (unit_price_net * (1 - discount_rate)
-        - net_purchase_price) else 0 end, 2) as gross_margin
+    cast(case when is_sale then quantity - refunded_quantity else 0 end as integer) as kept_quantity,
+    cast(round(quantity * unit_price_gross * (1 - discount_rate), 2) as decimal(14, 2)) as line_amount_gross,
+    cast(round(case when is_sale then (quantity - refunded_quantity) * unit_price_net * (1 - discount_rate)
+        else 0 end, 2) as decimal(14, 2)) as net_revenue,
+    cast(round(case when is_sale then (quantity - refunded_quantity) * net_purchase_price else 0 end, 2)
+        as decimal(14, 2)) as purchase_cost,
+    cast(round(case when is_sale then (quantity - refunded_quantity) * (unit_price_net * (1 - discount_rate)
+        - net_purchase_price) else 0 end, 2) as decimal(14, 2)) as gross_margin
 from joined

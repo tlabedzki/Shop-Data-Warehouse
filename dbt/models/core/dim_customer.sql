@@ -8,7 +8,7 @@ with accounts as (
 
 select
     person_id as customer_id,
-    max(accounts) as accounts,
+    cast(max(accounts) as integer) as accounts,
     arg_min(first_name, customer_id) as first_name,
     arg_min(last_name, customer_id) as last_name,
     arg_min(gender, customer_id) as gender,

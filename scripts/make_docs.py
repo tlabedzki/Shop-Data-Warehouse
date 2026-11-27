@@ -1,0 +1,143 @@
+"""
+Draw the warehouse from dbt's manifest: an entity relationship diagram of the core star schema and the lineage of
+every model, both as Mermaid (GitHub renders it in Markdown).
+
+    python scripts/make_docs.py           # write docs/erd.md and docs/lineage.md
+    python scripts/make_docs.py --check   # exit 1 when they are out of date with the dbt project
+
+Columns in the ERD: keys, foreign keys and every column with a description in the model's YAML; types come from
+the model contracts, so no warehouse is needed.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DBT_DIR = ROOT / "dbt"
+DOCS = ROOT / "docs"
+LAYERS = ["source", "seed", "staging", "intermediate", "quality", "core", "marts"]
+LAYER_TITLES = {"source": "raw files", "seed": "reference", "staging": "staging", "intermediate": "intermediate",
+                "quality": "quality", "core": "core (star schema)", "marts": "marts"}
+
+
+def parse_manifest() -> dict:
+    from dbt.cli.main import dbtRunner
+
+    os.environ.setdefault("SHOP_DWH_WAREHOUSE", str(ROOT / "output" / "docs.duckdb"))
+    result = dbtRunner().invoke(["parse", "--project-dir", str(DBT_DIR), "--profiles-dir", str(DBT_DIR), "--quiet"])
+    if not result.success:
+        raise SystemExit(f"dbt parse failed: {result.exception}")
+    return json.loads((DBT_DIR / "target" / "manifest.json").read_text(encoding="utf-8"))
+
+
+def layer(node: dict) -> str:
+    if node["resource_type"] in {"source", "seed"}:
+        return node["resource_type"]
+    return node["fqn"][1]
+
+
+def relationships(manifest: dict) -> list[tuple[str, str, str, str]]:
+    """(child model, child column, parent model, parent column) from the relationships tests."""
+    edges = set()
+    for node in manifest["nodes"].values():
+        meta = node.get("test_metadata") or {}
+        if node["resource_type"] != "test" or meta.get("name") != "relationships":
+            continue
+        kwargs = meta["kwargs"]
+        parent = re.search(r"ref\('([^']+)'\)", kwargs["to"]).group(1)
+        child = manifest["nodes"][node["attached_node"]]["name"]
+        edges.add((child, kwargs["column_name"], parent, kwargs["field"]))
+    return sorted(edges)
+
+
+def unique_columns(manifest: dict) -> set[tuple[str, str]]:
+    keys = set()
+    for node in manifest["nodes"].values():
+        meta = node.get("test_metadata") or {}
+        if node["resource_type"] == "test" and meta.get("name") == "unique" and node.get("attached_node"):
+            keys.add((manifest["nodes"][node["attached_node"]]["name"], meta["kwargs"]["column_name"]))
+    return keys
+
+
+def erd(manifest: dict) -> str:
+    models = sorted((n for n in manifest["nodes"].values() if n["resource_type"] == "model" and layer(n) == "core"),
+                    key=lambda n: (not n["name"].startswith("dim_"), n["name"]))
+    edges = relationships(manifest)
+    foreign = {(child, column) for child, column, parent, _ in edges if parent != child}
+    primary = unique_columns(manifest)
+    lines = ["erDiagram"]
+    for model in models:
+        lines.append(f"    {model['name']} {{")
+        for name, column in model["columns"].items():
+            key = "PK" if (model["name"], name) in primary else "FK" if (model["name"], name) in foreign else ""
+            if not key and not column.get("description"):
+                continue
+            data_type = re.sub(r"\(.*\)", "", column.get("data_type") or "text")
+            lines.append(f"        {data_type} {name}{(' ' + key) if key else ''}")
+        lines.append("    }")
+    for child, column, parent, _ in edges:
+        if child != parent and parent in {m["name"] for m in models}:
+            lines.append(f'    {parent} ||--o{{ {child} : "{column}"')
+    return "\n".join(lines)
+
+
+def lineage(manifest: dict) -> str:
+    nodes = {**manifest["nodes"], **manifest["sources"]}
+    shown = {uid: n for uid, n in nodes.items() if n["resource_type"] in {"model", "seed", "source"}
+             and n["name"] != "_load_log"}
+    def node_id(node: dict) -> str:
+        return f"{layer(node)}_{node['name']}"
+
+    lines = ["flowchart LR"]
+    for name in LAYERS:
+        members = sorted((n for n in shown.values() if layer(n) == name), key=lambda n: n["name"])
+        lines.append(f'    subgraph {name}["{LAYER_TITLES[name]}"]')
+        lines += [f"        {node_id(member)}[{member['name']}]" for member in members]
+        lines.append("    end")
+    edges = set()
+    for uid, parents in manifest["parent_map"].items():
+        if uid not in shown:
+            continue
+        for parent in parents:
+            if parent in shown:
+                edges.add((node_id(shown[parent]), node_id(shown[uid])))
+    lines += [f"    {a} --> {b}" for a, b in sorted(edges)]
+    return "\n".join(lines)
+
+
+def documents(manifest: dict) -> dict[Path, str]:
+    note = "<!-- generated by scripts/make_docs.py from the dbt manifest; do not edit -->"
+    return {
+        DOCS / "erd.md": f"# Star schema (core)\n\n{note}\n\n```mermaid\n{erd(manifest)}\n```\n",
+        DOCS / "lineage.md": f"# Lineage of the dbt models\n\n{note}\n\n```mermaid\n{lineage(manifest)}\n```\n",
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--check", action="store_true", help="fail when the files are out of date")
+    args = parser.parse_args()
+    stale = []
+    for path, text in documents(parse_manifest()).items():
+        current = path.read_text(encoding="utf-8") if path.exists() else None
+        if current == text:
+            continue
+        if args.check:
+            stale.append(path.relative_to(ROOT).as_posix())
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+            print(f"Wrote {path.relative_to(ROOT).as_posix()}")
+    if stale:
+        print(f"Out of date: {', '.join(stale)}. Run python scripts/make_docs.py")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
