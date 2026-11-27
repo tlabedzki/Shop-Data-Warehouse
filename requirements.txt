@@ -1,0 +1,9 @@
+pandas~=2.2.3
+numpy~=2.1.3
+pyarrow~=18.1.0
+duckdb~=2.0.1
+dbt-core~=1.12.7
+dbt-duckdb~=1.11.1
+# scripts/get_data.py runs Data-Generator, which needs these two
+Faker~=33.1.0
+colorama~=0.4.6

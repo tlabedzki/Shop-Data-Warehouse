@@ -1,0 +1,22 @@
+[project]
+name = "shop-data-warehouse"
+version = "0.1.0"
+description = "Data warehouse of a fictional online shop: daily raw CSV files loaded into DuckDB, dbt layers, Airflow and data tests scored against an answer key"
+requires-python = ">=3.11"
+license = "MIT"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".cache", "output", "data", "dbt/target"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["shop_warehouse"]
