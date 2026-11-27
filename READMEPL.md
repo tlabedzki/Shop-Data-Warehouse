@@ -211,8 +211,8 @@ dla pięciu dni małego sklepu, powtarza jeden z nich i porównuje wynik z pełn
 **Wynik.**
 
 <!-- generated:daily -->
-Pierwsze 14 dni ładowane dzień po dniu dają 13 tabel warstw core, marts i quality równych bajt w bajt pełnemu ładowaniu
-tych samych dni (zgodne).
+Pierwsze 14 dni załadowano dzień po dniu i porównano z pełnym ładowaniem tych samych dni: 13 tabel warstw core, marts
+i quality jest identycznych bajt w bajt (zgodne).
 <!-- /generated:daily -->
 
 **Co to znaczy dla sklepu.** Codzienne ładowanie, ponowne uruchomienie dnia i odbudowa historii od zera dają te same

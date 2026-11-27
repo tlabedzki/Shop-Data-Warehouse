@@ -114,9 +114,9 @@ def blocks(numbers: dict, demo: dict | None) -> dict[str, str]:
                     f"{money(dirty['totals']['gross_margin'])} zł kontra {money(dirty['raw_totals']['gross_margin'])} "
                     f"zł ({pct(margin_gap, True)}). Klientów {n(dirty['totals']['customers'])}, a kont w plikach "
                     f"{n(dirty['raw_totals']['customers'])}.{images['raw-vs-warehouse']}"),
-            "daily": (f"Pierwsze {n(replay['days'])} dni ładowane dzień po dniu dają {n(replay['tables'])} tabel "
-                      f"warstw core, marts i quality równych bajt w bajt pełnemu ładowaniu tych samych dni "
-                      f"({'zgodne' if replay['daily_equals_full'] else 'różnice: ' + differ})."),
+            "daily": (f"Pierwsze {n(replay['days'])} dni załadowano dzień po dniu i porównano z pełnym ładowaniem "
+                      f"tych samych dni: {n(replay['tables'])} tabel warstw core, marts i quality jest identycznych "
+                      f"bajt w bajt ({'zgodne' if replay['daily_equals_full'] else 'różnice: ' + differ})."),
             "verdicts": verdicts(numbers, rows, agree, clean, clean_counts),
         }
     else:
