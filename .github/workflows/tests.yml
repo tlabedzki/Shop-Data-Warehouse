@@ -17,3 +17,44 @@ jobs:
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest
+
+  airflow:
+    # The DAG in a real Airflow: five days of a small shop with airflow dags test, a rerun of one day, then the
+    # warehouse is compared with a full build of the same days.
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_VERSION: "3.4.0"
+      AIRFLOW_HOME: ${{ github.workspace }}/airflow/home
+      AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      SHOP_DWH_PYTHON: ${{ github.workspace }}/.venv/bin/python
+      PYTHONPATH: ${{ github.workspace }}/src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Project environment (dbt, DuckDB)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+      - name: Airflow environment
+        run: |
+          python -m venv /tmp/airflow-venv
+          /tmp/airflow-venv/bin/pip install "apache-airflow==${AIRFLOW_VERSION}" pytest \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.11.txt"
+      - name: DAG structure
+        run: /tmp/airflow-venv/bin/python -m pytest airflow/tests -q -p no:cacheprovider
+      - name: Small shop
+        run: .venv/bin/python -m shop_warehouse.cli prepare --small
+      - name: Five days and a rerun with airflow dags test
+        run: |
+          set -o pipefail
+          /tmp/airflow-venv/bin/airflow db migrate
+          for day in 2023-01-01 2023-01-02 2023-01-03 2023-01-04 2023-01-05 2023-01-03; do
+            /tmp/airflow-venv/bin/airflow dags test shop_warehouse "$day"
+          done
+      - name: The warehouse equals a full build of the same days
+        run: .venv/bin/python -m shop_warehouse.cli compare-full --expect-days 5
