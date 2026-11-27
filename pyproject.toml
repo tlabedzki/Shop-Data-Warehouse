@@ -1,6 +1,6 @@
 [project]
 name = "shop-data-warehouse"
-version = "1.0.2"
+version = "1.0.3"
 description = "Data warehouse of a fictional online shop: daily raw CSV files loaded into DuckDB, dbt layers, Airflow and data tests scored against an answer key"
 requires-python = ">=3.11"
 license = "MIT"
