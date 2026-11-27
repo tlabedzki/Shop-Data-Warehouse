@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: dq_issues
+    description: >
+      The warehouse's log of data quality problems: one row per value a cleaning rule found wrong, the raw value,
+      what the warehouse keeps instead (empty when the true value cannot be known) and the action. Each rule has a
+      warn test below, so dbt build reports what it found without stopping.
+    data_tests:
+      - no_quality_issues:
+          name: quality_customers_phone_number_missing
+          arguments: {table_name: customers, column_name: phone_number, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_phone_number_format
+          arguments: {table_name: customers, column_name: phone_number, rule: format}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_email_missing
+          arguments: {table_name: customers, column_name: email, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_email_format
+          arguments: {table_name: customers, column_name: email, rule: format}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_postal_code_format
+          arguments: {table_name: customers, column_name: postal_code, rule: format}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_city_missing
+          arguments: {table_name: customers, column_name: city, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_city_typo
+          arguments: {table_name: customers, column_name: city, rule: typo}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_age_missing
+          arguments: {table_name: customers, column_name: age, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_age_outlier
+          arguments: {table_name: customers, column_name: age, rule: outlier}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_customers_customer_id_duplicate_customer
+          arguments: {table_name: customers, column_name: customer_id, rule: duplicate_customer}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_products_color_missing
+          arguments: {table_name: products, column_name: color, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_products_net_purchase_price_outlier
+          arguments: {table_name: products, column_name: net_purchase_price, rule: outlier}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_order_lines_order_line_id_duplicate_row
+          arguments: {table_name: order_lines, column_name: order_line_id, rule: duplicate_row}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_order_lines_payment_provider_missing
+          arguments: {table_name: order_lines, column_name: payment_provider, rule: missing}
+          config: {severity: warn}
+      - no_quality_issues:
+          name: quality_order_lines_quantity_outlier
+          arguments: {table_name: order_lines, column_name: quantity, rule: outlier}
+          config: {severity: warn}
+    columns:
+      - name: table_name
+        description: Source table (customers, products, order_lines).
+      - name: record_key
+        description: Key of the row (customer, product or order line id).
+      - name: column_name
+        description: Column the rule checks.
+      - name: rule
+        description: missing, format, typo, outlier, duplicate_customer or duplicate_row.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [missing, format, typo, outlier, duplicate_customer, duplicate_row]
+      - name: raw_value
+        description: Value in the file.
+      - name: kept_value
+        description: Value the warehouse keeps; empty when the true value is not in the data.
+      - name: action
+        description: fixed, set to unknown, merged or removed copy.

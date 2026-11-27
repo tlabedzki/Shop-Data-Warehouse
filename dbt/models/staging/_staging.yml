@@ -1,0 +1,92 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: Customer accounts, typed and cleaned; raw values kept next to the clean ones.
+    columns:
+      - name: customer_id
+        description: Account key.
+        data_tests: [unique, not_null]
+  - name: stg_products
+    description: Every catalogue record (product and extract day), typed; purchase price checked against the list price.
+  - name: stg_order_lines
+    description: Order lines, typed, each line once; missing payment provider taken from the order's other lines.
+    columns:
+      - name: order_line_id
+        description: Order line key.
+        data_tests: [unique, not_null]
+  - name: stg_order_events
+    description: Order status log, typed.
+  - name: stg_payments
+    description: Payments, typed.
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests: [unique, not_null]
+  - name: stg_shipments
+    description: Shipments, typed.
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests: [unique, not_null]
+  - name: stg_returns
+    description: Returns, typed.
+  - name: stg_reviews
+    description: Reviews, typed.
+  - name: stg_sessions
+    description: Web sessions, typed.
+  - name: stg_campaigns
+    description: Campaigns, typed.
+
+unit_tests:
+  - name: phone_numbers_in_any_format_become_one
+    model: stg_customers
+    given:
+      - input: source('raw', 'customers')
+        rows:
+          - {customer_id: '1', phone_number: '+48 600 100 200', postal_code: '00-001', city: 'Warszawa', age: '30', email: 'a@example.com'}
+          - {customer_id: '2', phone_number: '600-100-200', postal_code: '00001', city: 'warszawa', age: '150', email: ' A@Example.com '}
+          - {customer_id: '3', phone_number: '0048600100200', postal_code: '00 001', city: '', age: '', email: ''}
+          - {customer_id: '4', phone_number: '(60) 0100200', postal_code: '00-001', city: 'Warszawa', age: '18', email: 'b@example.com'}
+          - {customer_id: '5', phone_number: '22 577 94 90', postal_code: '99-999', city: 'Nowhere', age: '0', email: 'c@example.com'}
+      - input: ref('postal_codes')
+        rows:
+          - {postal_code: '00-001', city: 'Warszawa'}
+    expect:
+      rows:
+        - {customer_id: 1, phone_number: '+48600100200', postal_code: '00-001', city: 'Warszawa', age: 30, email: 'a@example.com'}
+        - {customer_id: 2, phone_number: '+48600100200', postal_code: '00-001', city: 'Warszawa', age: null, email: 'a@example.com'}
+        - {customer_id: 3, phone_number: '+48600100200', postal_code: '00-001', city: 'Warszawa', age: null, email: null}
+        - {customer_id: 4, phone_number: '+48600100200', postal_code: '00-001', city: 'Warszawa', age: 18, email: 'b@example.com'}
+        - {customer_id: 5, phone_number: '+48225779490', postal_code: '99-999', city: 'Nowhere', age: null, email: 'c@example.com'}
+
+  - name: purchase_price_typed_in_grosze_is_divided
+    model: stg_products
+    given:
+      - input: source('raw', 'products')
+        rows:
+          - {product_id: '1', net_purchase_price: '50.0', sales_price_net: '81.3', _extract_date: '2023-01-01'}
+          - {product_id: '2', net_purchase_price: '5000.0', sales_price_net: '81.3', _extract_date: '2023-01-01'}
+          - {product_id: '3', net_purchase_price: '99999.0', sales_price_net: '81.3', _extract_date: '2023-01-01'}
+    expect:
+      rows:
+        - {product_id: 1, net_purchase_price: 50.00}
+        - {product_id: 2, net_purchase_price: 50.00}
+        - {product_id: 3, net_purchase_price: 999.99}
+
+  - name: line_saved_twice_is_kept_once_and_provider_filled
+    model: stg_order_lines
+    given:
+      - input: source('raw', 'order_lines')
+        rows:
+          - {order_id: '10', order_line_id: '100', payment_provider: 'PayU', order_datetime: '2023-01-01 10:00:00', _extract_date: '2023-01-01'}
+          - {order_id: '10', order_line_id: '101', payment_provider: null, order_datetime: '2023-01-01 10:00:00', _extract_date: '2023-01-01'}
+          - {order_id: '10', order_line_id: '101', payment_provider: null, order_datetime: '2023-01-01 10:00:00', _extract_date: '2023-01-01'}
+          - {order_id: '11', order_line_id: '102', payment_provider: null, order_datetime: '2023-01-01 11:00:00', _extract_date: '2023-01-01'}
+    expect:
+      rows:
+        - {order_line_id: 100, payment_provider: 'PayU', copies: 1}
+        - {order_line_id: 101, payment_provider: 'PayU', copies: 2}
+        - {order_line_id: 102, payment_provider: null, copies: 1}

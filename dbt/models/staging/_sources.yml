@@ -1,0 +1,29 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Daily CSV files of the shop's systems, loaded as text by shop_warehouse.load (one extract date per file).
+    schema: raw
+    tables:
+      - name: customers
+        description: New customer accounts of the day; accounts older than the first day come in the initial export.
+      - name: products
+        description: Full product record on every day it changes (launch, new list price, end of sale).
+      - name: order_lines
+        description: Order lines as placed, without their later status.
+      - name: order_events
+        description: Order status log (placed, paid, payment_failed, cancelled, shipped, delivered, returned).
+      - name: payments
+        description: Payment of an order with the payment operator's fee, on the order day.
+      - name: shipments
+        description: Shipment of an order on its dispatch day; the delivery comes as an order event.
+      - name: returns
+        description: Returned order lines on the day the return is registered.
+      - name: reviews
+        description: Ratings of delivered order lines.
+      - name: sessions
+        description: Web sessions of the day.
+      - name: campaigns
+        description: Marketing campaigns on their first day.
+      - name: _load_log
+        description: One row per loaded file (extract date, table, rows, SHA-256); written by the loader.

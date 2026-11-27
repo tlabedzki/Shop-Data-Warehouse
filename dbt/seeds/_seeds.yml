@@ -1,0 +1,14 @@
+version: 2
+
+seeds:
+  - name: postal_codes
+    description: >
+      Polish postal codes with their main locality (20,553 codes). Źródło: ZnajdzKod.pl na podstawie PRG (GUGiK)
+      i TERYT (GUS), stan 16.09.2026; the same file Data-Generator draws addresses from.
+    config:
+      column_types: {postal_code: varchar, city: varchar}
+    columns:
+      - name: postal_code
+        data_tests: [unique, not_null]
+      - name: city
+        data_tests: [not_null]

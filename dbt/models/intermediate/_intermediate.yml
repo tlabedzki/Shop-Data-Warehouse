@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: int_customer_accounts
+    description: Account to customer (person) map; accounts sharing a bank account number are one person.
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+  - name: int_product_versions
+    description: Product versions (SCD2) built from the history of catalogue extracts.
+    columns:
+      - name: product_version_id
+        data_tests: [unique, not_null]
+  - name: int_order_status
+    description: Status and step times of every order from its event log.
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+  - name: int_order_lines
+    description: Order lines with a checked quantity, recovered from the payment when it was impossible.
+    columns:
+      - name: order_line_id
+        data_tests: [unique, not_null]
+
+unit_tests:
+  - name: quantity_is_recovered_from_the_payment
+    model: int_order_lines
+    given:
+      - input: ref('stg_order_lines')
+        rows:
+          # 3 units at 100 PLN typed as 300; the other line is 1 x 50 PLN with a 10% discount.
+          - {order_line_id: 1, order_id: 10, quantity_raw: 300, unit_price_gross: 100.00, discount_rate: 0}
+          - {order_line_id: 2, order_id: 10, quantity_raw: 1, unit_price_gross: 50.00, discount_rate: 0.1}
+          # Not shipped: the delivery fee is unknown, so the quantity stays unknown.
+          - {order_line_id: 3, order_id: 11, quantity_raw: 120, unit_price_gross: 20.00, discount_rate: 0}
+      - input: ref('stg_payments')
+        rows:
+          - {order_id: 10, payment_amount: 357.99}
+          - {order_id: 11, payment_amount: 52.99}
+      - input: ref('stg_shipments')
+        rows:
+          - {order_id: 10, shipping_cost: 12.99}
+    expect:
+      rows:
+        - {order_line_id: 1, quantity: 3}
+        - {order_line_id: 2, quantity: 1}
+        - {order_line_id: 3, quantity: null}
+
+  - name: latest_event_is_the_order_status
+    model: int_order_status
+    given:
+      - input: ref('stg_order_events')
+        rows:
+          - {order_id: 1, event_type: placed, event_rank: 1, event_at: '2023-01-01 10:00:00'}
+          - {order_id: 1, event_type: paid, event_rank: 2, event_at: '2023-01-01 10:00:00'}
+          - {order_id: 1, event_type: shipped, event_rank: 5, event_at: '2023-01-02 09:00:00'}
+          - {order_id: 2, event_type: placed, event_rank: 1, event_at: '2023-01-01 11:00:00'}
+          - {order_id: 2, event_type: cancelled, event_rank: 4, event_at: '2023-01-03 08:00:00', cancel_reason: out_of_stock}
+    expect:
+      rows:
+        - {order_id: 1, order_status: shipped, paid_at: '2023-01-01 10:00:00', cancel_reason: null}
+        - {order_id: 2, order_status: cancelled, paid_at: null, cancel_reason: out_of_stock}

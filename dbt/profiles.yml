@@ -1,0 +1,7 @@
+shop_warehouse:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('SHOP_DWH_WAREHOUSE') }}"
+      threads: 4

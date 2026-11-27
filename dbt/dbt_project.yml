@@ -1,0 +1,41 @@
+name: shop_warehouse
+version: "1.0.0"
+config-version: 2
+profile: shop_warehouse
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "logs"]
+
+vars:
+  # Set by the daily run (Airflow or main.py --daily): incremental models then read only this extract date.
+  run_date: null
+
+models:
+  shop_warehouse:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: table
+    quality:
+      +schema: quality
+      +materialized: table
+    core:
+      +schema: core
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table
+
+seeds:
+  shop_warehouse:
+    +schema: reference
+
+data_tests:
+  shop_warehouse:
+    +severity: error
